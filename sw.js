@@ -1,7 +1,7 @@
-/* SKYPRO uygulama önbelleği: sürüm 1.0.0 */
-const SURUM="1.0.0";
+/* SKYPRO uygulama önbelleği: sürüm 1.0.1 */
+const SURUM="1.0.1";
 const CACHE="skypro-"+SURUM;
-const DOSYALAR=["./","index.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/maskable-512.png","icons/favicon.ico"];
+const DOSYALAR=["./","index.html","manifest.webmanifest","icons/icon-192-v2.png","icons/icon-512-v2.png","icons/maskable-512-v2.png","icons/favicon.ico"];
 self.addEventListener("install",e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(DOSYALAR.map(u=>new Request(u,{cache:"reload"}))))); if(!self.registration.active) self.skipWaiting(); });
 self.addEventListener("activate",e=>{ e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x.startsWith("skypro-")&&x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())); });
 self.addEventListener("message",e=>{ if(e.data==="skipWaiting") self.skipWaiting(); });
