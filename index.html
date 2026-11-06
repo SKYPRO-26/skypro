@@ -1340,7 +1340,7 @@ function islemForm(opt={}){
   const _upd=upd; upd=(...a)=>{ _upd(...a); etki(); }; etki();
   ["#i_tutar","#i_ht"].forEach(q=>$(q)?.addEventListener("input",etki));
   $("#i_cariAra")?.addEventListener("input",e=>{ const v=e.target.value.trim(); const c=sortedCariler().find(c=>`${c.kod} · ${c.unvan}`===v);
-    if(c){ $("#i_cari").value=c.id; st.cari=c.id; $("#i_kur").value=""; upd(); $("#i_tutar").focus(); } });
+    if(c){ $("#i_cari").value=c.id; st.cari=c.id; $("#i_kur").value=""; upd(); $("#i_tarih").focus(); } });
   $("#i_kat").addEventListener("input",e=>e.target.dataset.el="1");
   $("#turSeg")?.addEventListener("click",e=>{ const b=e.target.closest("button[data-t]"); if(!b) return; st.tur=b.dataset.t; F.querySelectorAll("#turSeg button").forEach(x=>x.setAttribute("aria-pressed",x===b)); $("#i_kur").value=""; upd(true); });
   $("#i_kanal").addEventListener("change",e=>{ st.kanal=e.target.value; upd(); });
@@ -2287,7 +2287,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.2.0";
+const SURUM="1.2.1";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
