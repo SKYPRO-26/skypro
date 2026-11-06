@@ -1053,12 +1053,13 @@ function vVade(){
   const cum=[]; let c=bas; for(let i=0;i<W;i++){ c+=inn[i]-out[i]; cum.push(c); }
   const html=`<section class="panel"><header><h2>Nakit akışı tahmini · 12 hafta</h2>
     <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="vff" ${f.fat?"checked":""}> Açık fatura vadelerini de dahil et</label></header>
-    <div class="pad chart">${nakitChart(bas,inn,out,cum)}
-    <div class="legend"><span><i style="background:var(--borc)"></i>Beklenen giriş</span><span><i style="background:var(--alacak)"></i>Beklenen çıkış</span><span><i style="background:var(--accent)"></i>Tahmini kasa+banka</span></div>
+    <div class="pad"><div id="nakitChart" style="min-height:230px"></div>
+    <div class="legend"><span><i style="background:var(--alacak)"></i>Beklenen giriş</span><span><i style="background:var(--borc)"></i>Beklenen çıkış</span><span><i style="background:var(--accent)"></i>Tahmini kasa+banka</span></div>
     <p class="small muted">Başlangıç: bugünkü kasa+banka ${money(bas)}. Girişler tahsil edilmemiş müşteri çek/senetleri${f.fat?" ve açık alacak vadeleri":""}; çıkışlar verilen çek/senetler${f.fat?" ve açık borç vadeleri":""}. Vadesi geçmiş kalemler ilk haftaya yazılır.</p></div></section>
   ${grp.map(([t,fn])=>{const l=ev.filter(e=>e.vade&&fn(e)); const i=l.filter(e=>e.yon==="in").reduce((s,e)=>s+e.tutar*kur(e.doviz),0), o=l.filter(e=>e.yon==="out").reduce((s,e)=>s+e.tutar*kur(e.doviz),0);
    return `<section class="panel"><header><h2>${t}</h2><span class="small"><span class="amt b">+${money(i)}</span> &nbsp; <span class="amt a">−${money(o)}</span></span></header>${l.length?`<div class="list">${l.map(evRow).join("")}</div>`:`<div class="empty">Kalem yok.</div>`}</section>`;}).join("")}`;
-  return {title:"Vade takvimi",html,after(){ $("#vff").addEventListener("change",e=>{f.fat=e.target.checked;render();}); }};
+  return {title:"Vade takvimi",html,after(){ canliGrafik("#nakitChart",W=>sutunGrafik(W,{etiket:Array.from({length:12},(_,i)=>trDate(addDays(TODAY,i*7)).slice(0,5)),seriler:[{ad:"Beklenen giriş",renk:"var(--alacak)",v:inn},{ad:"Beklenen çıkış",renk:"var(--borc)",v:out}],cizgi:{ad:"Tahmini kasa+banka",renk:"var(--accent)",v:cum},yukseklik:230}));
+    $("#vff").addEventListener("change",e=>{f.fat=e.target.checked;render();}); }};
 }
 function nakitChart(bas,inn,out,cum){
   const W=720,H=240,L=78,R=12,T=14,B=30,w=W-L-R,h=H-T-B;
@@ -1981,6 +1982,37 @@ Object.assign(ACT,{
   }
 });
 
+/* ---------- grafik yardımcıları: ekran boyutunda çizim ---------- */
+const kisa = v => { const a=Math.abs(v), s=v<0?"−":""; if(a>=1e6) return s+(a/1e6).toLocaleString("tr-TR",{maximumFractionDigits:a>=1e7?0:1})+" mn"; if(a>=1e3) return s+(a/1e3).toLocaleString("tr-TR",{maximumFractionDigits:a>=1e4?0:1})+" bin"; return s+Math.round(a).toLocaleString("tr-TR"); };
+function yuvarlakUst(v){ if(v<=0) return 1; const e=Math.pow(10,Math.floor(Math.log10(v))); for(const k of [1,1.5,2,2.5,3,4,5,6,8,10]) if(k*e>=v) return k*e; return 10*e; }
+let grafikRO=null;
+function canliGrafik(sel,ciz){
+  const el=$(sel); if(!el) return;
+  const yap=()=>{ const w=Math.max(280,Math.floor(el.clientWidth)); if(el.dataset.w==String(w)) return; el.dataset.w=w; el.innerHTML=ciz(w); };
+  yap(); grafikRO?.disconnect(); if(window.ResizeObserver){ grafikRO=new ResizeObserver(()=>yap()); grafikRO.observe(el); }
+}
+function sutunGrafik(W,{etiket,seriler,cizgi,yukseklik=220,degerYaz}){
+  const H=yukseklik, L=58, R=10, T=degerYaz?22:12, B=26, w=W-L-R, h=H-T-B, n=etiket.length;
+  const tum=[...seriler.flatMap(s=>s.v),...(cizgi?cizgi.v:[])];
+  const ust=yuvarlakUst(Math.max(0,...tum)), alt0=Math.min(0,...tum), alt=alt0<0?-yuvarlakUst(-alt0):0;
+  const y=v=>T+h-(v-alt)/(ust-alt)*h, slot=w/n, bw=Math.max(4,Math.min(28,slot*0.22)), gap=3;
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" style="display:block;max-width:100%" font-family="var(--f-ui)">`;
+  const tik=[alt<0&&(y(alt)-y(0))>=16?alt:null,0,ust/2,ust].filter((v,i,a)=>v!=null&&a.indexOf(v)===i);
+  for(const t of tik) s+=`<line x1="${L}" x2="${W-R}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}" stroke="var(--line)" ${t===0?"":'stroke-dasharray="2 3"'}/><text x="${L-6}" y="${(y(t)+3.5).toFixed(1)}" text-anchor="end" font-size="10.5" fill="var(--muted)">${kisa(t)}</text>`;
+  const k=seriler.length, grup=k*bw+(k-1)*gap, adim=n>14?Math.ceil(n/12):1;
+  for(let i=0;i<n;i++){
+    const cx=L+slot*i+slot/2, x0=cx-grup/2;
+    seriler.forEach((sr,j)=>{ const v=sr.v[i]||0; if(!v) return; const y1=y(Math.max(v,0)), y2=y(Math.min(v,0));
+      s+=`<rect x="${(x0+j*(bw+gap)).toFixed(1)}" y="${y1.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,y2-y1).toFixed(1)}" rx="2" fill="${sr.renk}" opacity=".88"><title>${etiket[i]} · ${sr.ad}: ${money(v)}</title></rect>`;
+      if(degerYaz) s+=`<text x="${(x0+j*(bw+gap)+bw/2).toFixed(1)}" y="${(y1-4).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="var(--muted)">${kisa(v)}</text>`; });
+    if(i%adim===0) s+=`<text x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${etiket[i]}</text>`;
+  }
+  if(cizgi){ const p=cizgi.v.map((v,i)=>[L+slot*i+slot/2,y(v)]);
+    if(n>1) s+=`<polyline points="${p.map(q=>q.map(z=>z.toFixed(1)).join(",")).join(" ")}" fill="none" stroke="${cizgi.renk}" stroke-width="1.6" stroke-linejoin="round"/>`;
+    p.forEach((q,i)=>s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="3" fill="var(--surface)" stroke="${cizgi.renk}" stroke-width="1.6"><title>${etiket[i]} · ${cizgi.ad}: ${money(cizgi.v[i])}</title></circle>`); }
+  return s+"</svg>";
+}
+
 /* ---------- gelir ve gider türleri yönetimi ---------- */
 function turVeri(){ const t=S.data.turler||(S.data.turler={gelir:[],gider:[],gizli:[]}); t.gelir=t.gelir||[]; t.gider=t.gider||[]; t.gizli=t.gizli||[]; return t; }
 const turListe = yon => { const t=turVeri(), def=yon==="gelir"?GELIR_TUR:GIDER_TUR; return [...def.filter(x=>!t.gizli.includes(x)),...t[yon].filter(x=>!def.includes(x))]; };
@@ -2074,23 +2106,17 @@ function ggHesapla(bas,bit,kdvHaric,digerDahil){
 function ggAylar(bas,bit){ const out=[]; let d=new Date(bas.slice(0,7)+"-01T00:00"); const e=bit.slice(0,7); while(iso(d).slice(0,7)<=e&&out.length<36){ out.push(iso(d).slice(0,7)); d.setMonth(d.getMonth()+1); } return out; }
 const AY_K=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ayAd = ym => AY_K[+ym.slice(5,7)-1]+" "+ym.slice(2,4);
-function ggGrafik(aylar,R){
-  const W=760,H=260,L=72,Rr=12,T=14,B=30,w=W-L-Rr,h=H-T-B;
-  const g=aylar.map(a=>R.ay[a]?.g||0), c=aylar.map(a=>R.ay[a]?.c||0), n=aylar.map((_,i)=>g[i]-c[i]);
-  const mx=Math.max(1,...g,...c), mn=Math.min(0,...n), lo=mn<0?mn*1.1:0, hi=mx*1.05;
-  const y=v=>T+h-(v-lo)/(hi-lo)*h, bw=w/aylar.length;
-  const fk=v=>{const a=Math.abs(v);return (v<0?"−":"")+(a>=1e6?(a/1e6).toLocaleString("tr-TR",{maximumFractionDigits:1})+" Mn":a>=1e3?Math.round(a/1e3).toLocaleString("tr-TR")+" B":Math.round(a));};
-  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Aylık gelir ve gider">`;
-  const ticks=[lo<-0.12*hi?lo:null,0,hi/2,hi].filter((v,i,a)=>v!=null&&a.indexOf(v)===i);
-  for(const t of ticks) s+=`<line x1="${L}" x2="${W-Rr}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${L-8}" y="${y(t)+4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--f-num)">${fk(t)} ₺</text>`;
-  const bwid=Math.min(26,bw*.34);
-  aylar.forEach((a,i)=>{ const cx=L+i*bw+bw/2;
-    s+=`<rect x="${cx-bwid-1}" y="${y(g[i])}" width="${bwid}" height="${Math.max(0,y(0)-y(g[i]))}" fill="var(--alacak)" rx="2"><title>${ayAd(a)} gelir: ${money(g[i])}</title></rect>`;
-    s+=`<rect x="${cx+1}" y="${y(c[i])}" width="${bwid}" height="${Math.max(0,y(0)-y(c[i]))}" fill="var(--borc)" rx="2"><title>${ayAd(a)} gider: ${money(c[i])}</title></rect>`;
-    if(aylar.length<=14||i%2===0) s+=`<text x="${cx}" y="${H-10}" text-anchor="middle" font-size="11" fill="var(--muted)">${ayAd(a)}</text>`; });
-  s+=`<polyline points="${n.map((v,i)=>`${L+i*bw+bw/2},${y(v)}`).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2.2"/>`;
-  n.forEach((v,i)=>s+=`<circle cx="${L+i*bw+bw/2}" cy="${y(v)}" r="3" fill="var(--accent)"><title>${ayAd(aylar[i])} net: ${money(v)}</title></circle>`);
-  return s+"</svg>";
+function ggGrafikAylar(aylar,R){
+  // gelecek ayları at; veri başlamadan önceki boş ayları kısalt (en az 6 ay göster)
+  const buAy=TODAY.slice(0,7); let L=aylar.filter(a=>a<=buAy); if(!L.length) L=aylar.slice(0,1);
+  const ilk=L.findIndex(a=>(R.ay[a]?.g||0)||(R.ay[a]?.c||0));
+  if(ilk>0) L=L.slice(ilk);
+  return L;
+}
+function ggGrafik(W,aylar,R){
+  if(!aylar.some(a=>R.ay[a])) return `<div class="empty">Bu dönemde gelir veya gider kaydı yok.</div>`;
+  return sutunGrafik(W,{etiket:aylar.map(ayAd),seriler:[{ad:"Gelir",renk:"var(--alacak)",v:aylar.map(a=>R.ay[a]?.g||0)},{ad:"Gider",renk:"var(--borc)",v:aylar.map(a=>R.ay[a]?.c||0)}],
+    yukseklik:220});
 }
 function ggDagilim(K,top,renk,yon){
   const L=Object.entries(K).sort((a,b)=>b[1].tutar-a[1].tutar);
@@ -2123,7 +2149,7 @@ function vGelirGider(){
     <div class="kpi"><span class="l">${net>=0?"Dönem kârı":"Dönem zararı"}</span><span class="v">${money(net)}</span><span class="n">Gelir − gider</span></div>
     <div class="kpi"><span class="l">Kâr marjı</span><span class="v">%${marj.toLocaleString("tr-TR",{maximumFractionDigits:1})}</span><span class="n">Net / gelir</span></div>
   </div>
-  <section class="panel"><header><h2>Aylık gelir ve gider</h2><div class="legend"><span><i style="background:var(--alacak)"></i>Gelir</span><span><i style="background:var(--borc)"></i>Gider</span><span><i style="background:var(--accent)"></i>Net</span></div></header><div class="pad chart">${ggGrafik(aylar,R)}</div></section>
+  <section class="panel"><header><h2>Aylık gelir ve gider</h2><div class="legend"><span><i style="background:var(--alacak)"></i>Gelir</span><span><i style="background:var(--borc)"></i>Gider</span></div></header><div class="pad"><div id="ggChart" style="min-height:230px"></div></div></section>
   <div class="grid2">
     <section class="panel"><header><h2>Gelirler</h2><span class="small muted">Satırlara tıklayıp ayrıntıyı görün</span></header>${ggDagilim(R.gelir,R.topG,"var(--alacak)","gelir")}</section>
     <section class="panel"><header><h2>Giderler</h2><span class="small muted">Satırlara tıklayıp ayrıntıyı görün</span></header>${ggDagilim(R.gider,R.topC,"var(--borc)","gider")}</section>
@@ -2134,7 +2160,8 @@ function vGelirGider(){
   </tbody><tfoot><tr><td>Toplam</td><td class="r amt">${m(R.topG)}</td><td class="r amt">${m(R.topC)}</td><td class="r amt">${m(net)}</td></tr></tfoot></table></div></section>
   <p class="small muted">Gelir: satış faturaları${f.diger?" ve fatura dışı kasa/banka girişleri (POS tahsilatları hariç; bunlar satış faturalarının tahsilatıdır)":""}. Gider: alış faturaları${f.diger?" ve kasa/banka masrafları":""}. Tahsilat, ödeme, virman ve çek hareketleri gelir-gider değildir, dahil edilmez. Dövizli faturalar işlem kuruyla TL'ye çevrilir.${R.kdvBilinmeyen?` KDV oranı girilmemiş ${R.kdvBilinmeyen} fatura KDV dahil tutarıyla gösterildi.`:""}${f.kdv==="haric"?` Dönemde hesaplanan KDV ${money(R.hesKdv)}, indirilecek KDV ${money(R.indKdv)}.`:""} Vergi ödemeleri "Vergi / SGK" türünde gider olarak görünür; KDV ödemeleri gerçek gider değildir.</p>`;
   return {title:`Gelir ve gider<span class="sub">${trDate(bas)} – ${trDate(bit)}</span>`,btns:`<button class="btn" data-act="ggYazdir">Yazdırılabilir rapor</button><button class="btn pri" data-act="ggExcel">Excel'e aktar</button>`,html,
-    after(){ $("#gg_d").addEventListener("change",e=>{ f.donem=e.target.value; if(f.donem==="ozel"){ f.bas=bas; f.bit=bit; } render(); });
+    after(){ const ga=ggGrafikAylar(aylar,R); canliGrafik("#ggChart",W=>ggGrafik(W,ga,R));
+      $("#gg_d").addEventListener("change",e=>{ f.donem=e.target.value; if(f.donem==="ozel"){ f.bas=bas; f.bit=bit; } render(); });
       $("#gg_b")?.addEventListener("change",e=>{ f.bas=e.target.value; render(); }); $("#gg_e")?.addEventListener("change",e=>{ f.bit=e.target.value; render(); });
       $("#gg_k").addEventListener("change",e=>{ f.kdv=e.target.value; render(); }); $("#gg_o").addEventListener("change",e=>{ f.diger=e.target.checked; render(); }); }};
 }
