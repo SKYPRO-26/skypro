@@ -1,5 +1,5 @@
-/* SKYPRO uygulama önbelleği: sürüm 1.0.1 */
-const SURUM="1.0.1";
+/* SKYPRO uygulama önbelleği: sürüm 1.0.2 */
+const SURUM="1.0.2";
 const CACHE="skypro-"+SURUM;
 const DOSYALAR=["./","index.html","manifest.webmanifest","icons/icon-192-v2.png","icons/icon-512-v2.png","icons/maskable-512-v2.png","icons/favicon.ico"];
 self.addEventListener("install",e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(DOSYALAR.map(u=>new Request(u,{cache:"reload"}))))); if(!self.registration.active) self.skipWaiting(); });
@@ -7,10 +7,10 @@ self.addEventListener("activate",e=>{ e.waitUntil(caches.keys().then(k=>Promise.
 self.addEventListener("message",e=>{ if(e.data==="skipWaiting") self.skipWaiting(); });
 self.addEventListener("fetch",e=>{
   const r=e.request; if(r.method!=="GET"||new URL(r.url).origin!==location.origin) return;
-  // Program sayfası: önce sunucu (güncel sürüm), internet yoksa önbellek
-  if(r.mode==="navigate"){
-    e.respondWith(caches.open(CACHE).then(async c=>{ try{ const n=await fetch(r,{cache:"no-store"}); if(n.ok) c.put("index.html",n.clone()); return n; }catch{ return (await c.match("index.html"))||(await c.match("./"))||Response.error(); } }));
-    return;
-  }
-  e.respondWith(caches.match(r).then(m=>m||fetch(r)));
+  // İnternet varsa her şey sunucudan (güncel sürüm, simgeler, ayarlar); yoksa önbellekten
+  e.respondWith(caches.open(CACHE).then(async c=>{
+    const anahtar=r.mode==="navigate"?"index.html":r;
+    try{ const n=await fetch(r,{cache:"no-store"}); if(n.ok) c.put(anahtar,n.clone()); return n; }
+    catch{ return (await c.match(anahtar))||(r.mode==="navigate"?await c.match("./"):null)||Response.error(); }
+  }));
 });

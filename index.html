@@ -1663,7 +1663,7 @@ function ornekVeri(){
   return d;
 }
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.0.1";
+const SURUM="1.0.2";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
