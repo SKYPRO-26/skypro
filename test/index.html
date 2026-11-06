@@ -1151,10 +1151,12 @@ function vAyar(){
     <div class="btns"><button class="btn" data-act="mmGonder">Mali müşavire gönderilecek dosyayı indir</button></div>
     <p class="small muted" style="margin:0">İndirilen dosya şifreli kalır. Mali müşavir kendi programında <b>Dosyadan ekle</b> ile alır ve kendi yönetici parolasıyla açar.</p>
   </div></section>
+  ${turPanel()}
   ${S.canEdit?kullaniciPanel():""}
   <div class="grid2">${parolaPanel()}${S.canEdit?guvenlikPanel():""}</div>`;
   return {title:"Ayarlar",btns:" ",html,after(){
     $("#pwForm").addEventListener("submit",parolaDegistir);
+    turPanelBagla();
     $("#otDk")?.addEventListener("change",e=>{ S.data.oturumDk=+e.target.value; changed(); toast("Oturum süresi: "+e.target.value+" dakika"); });
     if(!S.canWrite) document.querySelectorAll("#ayForm input,#ayForm textarea,#kurForm input").forEach(x=>x.disabled=true);
     $("#ayForm").addEventListener("submit",async e=>{e.preventDefault(); const fd=Object.fromEntries(new FormData(e.target)); if(!S.canEdit) fd.kod=S.ayar?.firma?.kod||""; else { fd.kod=String(fd.kod||"").trim().toLocaleUpperCase("tr"); if(normK(fd.kod).length<2){ toast("Firma kodu en az 2 harf veya rakam olmalı."); return; } } const nx={...S.ayar,firma:fd}; if(await put("ayarlar","genel",nx)) toast("Firma bilgileri kaydedildi");});
@@ -1192,7 +1194,7 @@ function cariForm(id){
     <div class="f"><label for="c_iban">IBAN</label><input type="text" id="c_iban" name="iban" value="${esc(c?.iban||"")}"></div>
     <div class="f w"><label for="c_adr">Adres</label><textarea id="c_adr" name="adres">${esc(c?.adres||"")}</textarea></div>
     <div class="f"><label for="c_not">Not</label><input type="text" id="c_not" name="not" value="${esc(c?.not||"")}"></div>
-    <div class="f"><label for="c_vt">Varsayılan gelir / gider türü</label><input type="text" id="c_vt" name="varsayilanTur" list="cTurList" value="${esc(c?.varsayilanTur||"")}" placeholder="Örn. Nakliye ve lojistik"><datalist id="cTurList">${[...GIDER_TUR,...GELIR_TUR].map(t=>`<option value="${t}">`).join("")}</datalist><span class="hint">Bu carinin faturalarında tür kendiliğinden gelir.</span></div>
+    <div class="f"><label for="c_vt">Varsayılan gelir / gider türü</label><input type="text" id="c_vt" name="varsayilanTur" list="cTurList" value="${esc(c?.varsayilanTur||"")}" placeholder="Örn. Nakliye ve lojistik"><datalist id="cTurList">${[...turListe("gider"),...turListe("gelir")].map(t=>`<option value="${esc(t)}">`).join("")}</datalist><span class="hint">Bu carinin faturalarında tür kendiliğinden gelir.</span></div>
     ${!c?`<div class="f"><label for="c_ab">Açılış bakiyesi (isteğe bağlı)</label><input type="text" id="c_ab" name="acilis" inputmode="decimal" placeholder="0,00"></div>
     <div class="f"><label for="c_aby">Bakiye yönü</label><select id="c_aby" name="acilisYon"><option value="b">Borçlu (bize borcu var)</option><option value="a">Alacaklı (bizim borcumuz var)</option></select></div>
     <div class="f"><label for="c_abt">Açılış tarihi</label><input type="date" id="c_abt" name="acilisTarih" value="${TODAY.slice(0,4)}-01-01"></div>`:""}
@@ -1203,7 +1205,7 @@ function cariForm(id){
     if(!fd.unvan.trim()) return showErr("Ünvan boş olamaz.");
     const nid=id||uid("cr");
     const lim=num(fd.limit);
-    const rec={...(c||{}),id:nid,kod:fd.kod.trim(),tip:fd.tip,unvan:fd.unvan.trim(),vkn:fd.vkn.trim(),vd:fd.vd.trim(),doviz:hasH?c.doviz:fd.doviz,limit:lim>0?lim:null,yetkili:fd.yetkili,tel:fd.tel,eposta:fd.eposta,iban:fd.iban,adres:fd.adres,not:fd.not,varsayilanTur:(fd.varsayilanTur||"").trim(),...(c?{}:stamp())};
+    const rec={...(c||{}),id:nid,kod:fd.kod.trim(),tip:fd.tip,unvan:fd.unvan.trim(),vkn:fd.vkn.trim(),vd:fd.vd.trim(),doviz:hasH?c.doviz:fd.doviz,limit:lim>0?lim:null,yetkili:fd.yetkili,tel:fd.tel,eposta:fd.eposta,iban:fd.iban,adres:fd.adres,not:fd.not,varsayilanTur:(fd.varsayilanTur||"").trim().replace(/\s+/g," "),...(c?{}:stamp())};
     const ab=num(fd.acilis);
     if(ab>0 && kilitli(fd.acilisTarih)) return showErr("Açılış tarihi kilitli dönemde.");
     if(!(await put("cariler",nid,rec))) return;
@@ -1250,7 +1252,7 @@ function islemForm(opt={}){
   const lock=h&&kilitli(h.tarih);
   const cekLinked=!!h?.cekId;
   const turSec=["satis","alis","tahsilat","odeme","borc_dekont","alacak_dekont","hesap_giris","hesap_cikis","virman"];
-  const kat=`<datalist id="katList">${KATEGORI.map(k=>`<option value="${k}">`).join("")}</datalist>`;
+  const kat=`<datalist id="katList">${katListe().map(k=>`<option value="${esc(k)}">`).join("")}</datalist>`;
   const by=h?.by?`<span class="small muted" id="byInfo"></span>`:"<span></span>";
   modal(h?TUR[h.tur]+" düzenle":"Yeni işlem",`<form class="form" id="iForm">
     ${h?"":`<div class="f w"><label>İşlem türü</label><div class="seg" id="turSeg">${turSec.map(t=>`<button type="button" data-t="${t}" aria-pressed="${st.tur===t}">${TUR[t]}</button>`).join("")}</div></div>`}
@@ -1270,7 +1272,7 @@ function islemForm(opt={}){
     <div class="f"><label for="i_tutar">Tutar <span id="dvLbl"></span></label><input type="text" id="i_tutar" name="tutar" inputmode="decimal" value="${h?m(h.tutar):""}" placeholder="0,00" ${cekLinked?"disabled":""} required></div>
     <div class="f" data-g="kur"><label for="i_kur">Kur (₺)</label><input type="text" id="i_kur" name="kur" inputmode="decimal" value="${h?.kur&&h.kur!==1?h.kur:""}"></div>
     <div class="f" data-g="ht"><label for="i_ht" id="l_ht">Hesaba geçen tutar</label><input type="text" id="i_ht" name="hesapTutar" inputmode="decimal" value="${h?.hesapTutar!=null&&h.hesapTutar!==h.tutar?m(h.hesapTutar):(h?.hedefTutar!=null?m(h.hedefTutar):"")}"></div>
-    <div class="f" data-g="kat"><label for="i_kat" id="l_kat">Kategori</label><input type="text" id="i_kat" name="kategori" list="katList" value="${esc(h?.kategori||"")}">${kat}<datalist id="gelirList">${GELIR_TUR.map(t=>`<option value="${t}">`).join("")}</datalist><datalist id="giderList">${GIDER_TUR.map(t=>`<option value="${t}">`).join("")}</datalist></div>
+    <div class="f" data-g="kat"><label for="i_kat" id="l_kat">Kategori</label><input type="text" id="i_kat" name="kategori" list="katList" value="${esc(h?.kategori||"")}">${kat}<datalist id="gelirList">${turListe("gelir").map(t=>`<option value="${esc(t)}">`).join("")}</datalist><datalist id="giderList">${turListe("gider").map(t=>`<option value="${esc(t)}">`).join("")}</datalist></div>
     <div class="f" data-g="kdv"><label for="i_kdv">KDV oranı (tutar KDV dahil)</label><select id="i_kdv" name="kdv">${[["20","%20"],["10","%10"],["1","%1"],["0","%0 (istisna / ihracat)"],["","Belirtilmedi"]].map(([v,t])=>`<option value="${v}" ${(h?(h.kdv>=0?String(h.kdv):""):"20")===v?"selected":""}>${t}</option>`).join("")}</select></div>
     <div class="f" data-g="belge"><label for="i_belge">Belge no</label><input type="text" id="i_belge" name="belgeNo" value="${esc(h?.belgeNo||"")}"></div>
     <div class="f w"><label for="i_ack">Açıklama</label><input type="text" id="i_ack" name="aciklama" value="${esc(h?.aciklama||"")}"></div>
@@ -1313,7 +1315,7 @@ function islemForm(opt={}){
     show("kat",["hesap_giris","hesap_cikis"].includes(t)||fat); show("kdv",fat);
     $("#l_kat").textContent=t==="satis"?"Gelir türü":t==="alis"?"Gider türü":"Kategori";
     $("#i_kat").setAttribute("list",t==="satis"?"gelirList":t==="alis"?"giderList":"katList");
-    if(fat && !h && !$("#i_kat").dataset.el){ const vt=S.cariler.get(st.cari)?.varsayilanTur; const L=t==="satis"?GELIR_TUR:GIDER_TUR; $("#i_kat").value=vt&&L.includes(vt)?vt:(t==="satis"?"Mal satışı":""); }
+    if(fat && !h && !$("#i_kat").dataset.el){ const vt=S.cariler.get(st.cari)?.varsayilanTur; const L=turListe(t==="satis"?"gelir":"gider"); $("#i_kat").value=vt&&(L.includes(vt)||!katListe().includes(vt))?vt:(t==="satis"?"Mal satışı":""); }
     show("belge",t!=="virman");
     const dv=doviz(); $("#dvLbl").textContent="("+dv+")";
     show("kur",dv!=="TRY"); if(dv!=="TRY"&&!$("#i_kur").value) $("#i_kur").value=String(kur(dv)||"").replace(".",",");
@@ -1355,7 +1357,7 @@ function islemForm(opt={}){
     if(k) rec.kanal=k;
     if(hesapId) rec.hesapId=hesapId; else delete rec.hesapId;
     if(["satis","alis","borc_dekont","alacak_dekont"].includes(t)) rec.vade=fd.vade||"";
-    if(["hesap_giris","hesap_cikis","satis","alis"].includes(t)) rec.kategori=(fd.kategori||"").trim();
+    if(["hesap_giris","hesap_cikis","satis","alis"].includes(t)){ rec.kategori=(fd.kategori||"").trim().replace(/\s+/g," "); if(rec.kategori&&rec.kategori!=="POS / kredi kartı tahsilatı"&&!katListe().some(x=>x.toLocaleLowerCase("tr")===rec.kategori.toLocaleLowerCase("tr"))) turEkle(turYonu(rec),rec.kategori); }
     if(t==="satis"||t==="alis"){ if(fd.kdv==="") delete rec.kdv; else rec.kdv=+fd.kdv; } else delete rec.kdv;
     if(!$("#i_ht").closest(".f").hidden){ const v=num(fd.hesapTutar); if(!(v>0)) return showErr("Hesaba geçen tutarı girin."); if(t==="virman") rec.hedefTutar=r2(v); else rec.hesapTutar=r2(v); }
     else { delete rec.hesapTutar; delete rec.hedefTutar; }
@@ -1913,7 +1915,7 @@ function satirCiz(){
     if(r.tur==="virman") return `<select data-i="${r.i}" data-f="hedef"><option value="">— hesap seçin —</option>${hd.map(h=>`<option value="${h.id}" ${r.hedef===h.id?"selected":""}>${esc(h.ad)}</option>`).join("")}</select>`;
     return ""; };
   const kont=bakiyeKontrol();
-  $("#bkSatir").innerHTML=`<datalist id="katList2">${KATEGORI.map(k=>`<option value="${k}">`).join("")}<option value="Diğer gider"></datalist>
+  $("#bkSatir").innerHTML=`<datalist id="katList2">${katListe().map(k=>`<option value="${esc(k)}">`).join("")}</datalist>
   <div class="panel"><header><h2>Hareketler (${BK.R.length})</h2><div class="filters">
     <label>Göster<select id="bkFiltre"><option value="">Tümü</option><option value="secilmedi" ${f==="secilmedi"?"selected":""}>İşlem seçilmeyenler (${sayi("secilmedi")})</option><option value="hazir" ${f==="hazir"?"selected":""}>Aktarılacaklar (${sayi("hazir")})</option><option value="kayitli" ${f==="kayitli"?"selected":""}>Zaten kayıtlı (${sayi("kayitli")})</option></select></label>
     ${sayi("secilmedi")?`<label>Eşleşmeyenler için<select id="bkToplu"><option value="">Toplu işlem…</option><option value="diger">Diğer gelir / gider olarak işle</option><option value="atla">Aktarma (atla)</option></select></label>`:""}
@@ -1951,7 +1953,7 @@ async function bankaAktarKaydet(){
     let h;
     if(r.tur==="tahsilat"||r.tur==="odeme") h={...base,tur:r.tur,cariId:r.cariId,kanal:"banka",hesapId:BK.hesap};
     else if(r.tur==="virman") h={...base,tur:"virman",hesapId:BK.hesap,hedefHesapId:r.hedef};
-    else h={...base,tur:r.tur,hesapId:BK.hesap,kategori:r.kategori||(r.tutar>0?"Diğer gelir":"Diğer gider")};
+    else { h={...base,tur:r.tur,hesapId:BK.hesap,kategori:(r.kategori||(r.tutar>0?"Diğer gelir":"Diğer gider")).trim()}; if(h.kategori!=="POS / kredi kartı tahsilatı"&&!katListe().includes(h.kategori)) turEkle(r.tutar>0?"gelir":"gider",h.kategori); }
     S.data.hareketler[id]=h;
     S.data.bankaKurallari[kuralAnahtar(r.aciklama)]={yon:r.tutar>0?"giris":"cikis",tur:r.tur,cariId:r.cariId,kategori:r.kategori,hedef:r.hedef};
   }
@@ -1977,6 +1979,64 @@ Object.assign(ACT,{
     for(const h of hs) delete S.data.hareketler[h.id];
     changed(); toast(`${hs.length} hareket geri alındı`);
   }
+});
+
+/* ---------- gelir ve gider türleri yönetimi ---------- */
+function turVeri(){ const t=S.data.turler||(S.data.turler={gelir:[],gider:[],gizli:[]}); t.gelir=t.gelir||[]; t.gider=t.gider||[]; t.gizli=t.gizli||[]; return t; }
+const turListe = yon => { const t=turVeri(), def=yon==="gelir"?GELIR_TUR:GIDER_TUR; return [...def.filter(x=>!t.gizli.includes(x)),...t[yon].filter(x=>!def.includes(x))]; };
+const katListe = () => [...turListe("gider"),...turListe("gelir"),"POS / kredi kartı tahsilatı"];
+const turYonu = h => (h.tur==="satis"||h.tur==="hesap_giris")?"gelir":(h.tur==="alis"||h.tur==="hesap_cikis")?"gider":null;
+function turKullanim(yon,ad){ let n=0; for(const h of Object.values(S.data.hareketler)) if(turYonu(h)===yon&&h.kategori===ad) n++; return n; }
+function turEkle(yon,ad){
+  ad=String(ad||"").trim().replace(/\s+/g," "); if(!ad) return false;
+  const t=turVeri(), def=yon==="gelir"?GELIR_TUR:GIDER_TUR;
+  if(turListe(yon).some(x=>x.toLocaleLowerCase("tr")===ad.toLocaleLowerCase("tr"))) return false;
+  if(def.includes(ad)) t.gizli=t.gizli.filter(x=>x!==ad); else t[yon].push(ad);
+  return true;
+}
+function turKaldir(yon,ad,tasi){
+  const t=turVeri(), def=yon==="gelir"?GELIR_TUR:GIDER_TUR;
+  if(tasi!==undefined) for(const h of Object.values(S.data.hareketler)) if(turYonu(h)===yon&&h.kategori===ad&&!kilitli(h.tarih)) h.kategori=tasi;
+  for(const c of Object.values(S.data.cariler)) if(c.varsayilanTur===ad) c.varsayilanTur=tasi||"";
+  if(def.includes(ad)){ if(!t.gizli.includes(ad)) t.gizli.push(ad); } else t[yon]=t[yon].filter(x=>x!==ad);
+}
+function turPanel(){
+  const kolon=yon=>{ const L=turListe(yon), t=turVeri(), def=yon==="gelir"?GELIR_TUR:GIDER_TUR, gizli=t.gizli.filter(x=>def.includes(x));
+    return `<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><b>${yon==="gelir"?"Gelir türleri":"Gider türleri"}</b>
+    <div class="list" style="border:1px solid var(--line);border-radius:var(--r)">${L.map(ad=>{ const n=turKullanim(yon,ad); return `<div class="li" style="grid-template-columns:1fr auto auto;padding:6px 10px"><span class="t">${esc(ad)}${def.includes(ad)?"":` <span class="pill acc" style="font-size:11px">sizin</span>`}</span><span class="small muted">${n?n+" kayıt":""}</span><span class="btns" data-w><button class="btn sm" data-act="turAd" data-yon="${yon}" data-ad="${esc(ad)}">Adını değiştir</button><button class="btn sm" data-act="turSil" data-yon="${yon}" data-ad="${esc(ad)}">Kaldır</button></span></div>`; }).join("")}</div>
+    <form class="filters" data-turekle="${yon}" data-w><label style="flex:1;min-width:160px">Yeni ${yon==="gelir"?"gelir":"gider"} türü<input type="text" maxlength="60" placeholder="${yon==="gelir"?"Örn. Komisyon geliri":"Örn. Yazılım abonelikleri"}"></label><button class="btn pri" type="submit">Ekle</button></form>
+    ${gizli.length?`<div class="small muted">Gizlenen hazır türler: ${gizli.map(g=>`<a href="#" data-act="turGeri" data-yon="${yon}" data-ad="${esc(g)}">${esc(g)}</a>`).join(", ")} <span>(tıklayınca listeye döner)</span></div>`:""}</div>`; };
+  return `<section class="panel" id="turPanel"><header><h2>Gelir ve gider türleri</h2><span class="small muted">Faturalarda ve kasa/banka hareketlerinde seçilen türler. Bu firma için geçerlidir.</span></header>
+  <div class="pad grid2">${kolon("gelir")}${kolon("gider")}</div></section>`;
+}
+function turPanelBagla(){
+  document.querySelectorAll("form[data-turekle]").forEach(f=>f.addEventListener("submit",e=>{ e.preventDefault(); if(!S.canWrite) return; const yon=f.dataset.turekle, i=f.querySelector("input"), ad=i.value.trim();
+    if(!ad) return toast("Tür adını yazın."); if(!turEkle(yon,ad)) return toast("Bu tür listede zaten var.");
+    changed(); toast(`"${ad}" ${yon==="gelir"?"gelir":"gider"} türlerine eklendi`); }));
+}
+function turAdModal(yon,ad){
+  const n=turKullanim(yon,ad);
+  modal("Türün adını değiştir",`<form class="form" id="taForm"><div class="f w"><label for="ta_ad">Yeni ad</label><input type="text" id="ta_ad" maxlength="60" value="${esc(ad)}" required></div>
+    <p class="hint f w">${n?`Bu türdeki ${n} kayıt da yeni ada taşınır (kilitli dönemdekiler hariç).`:"Bu tür henüz hiçbir kayıtta kullanılmıyor."}</p><p class="err" id="mErr" hidden></p></form>`,
+    `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="taForm">Kaydet</button></div>`);
+  $("#taForm").addEventListener("submit",e=>{ e.preventDefault(); const yeni=$("#ta_ad").value.trim().replace(/\s+/g," ");
+    if(!yeni||yeni===ad) return closeModal();
+    if(turListe(yon).some(x=>x!==ad&&x.toLocaleLowerCase("tr")===yeni.toLocaleLowerCase("tr"))) return showErr("Bu adda bir tür zaten var. Kayıtları birleştirmek için eski türü kaldırıp bu türe taşıyın.");
+    turEkle(yon,yeni); turKaldir(yon,ad,yeni);
+    const t=turVeri(), L=t[yon], i=L.indexOf(yeni); if(i>-1){ L.splice(i,1); L.push(yeni); }
+    closeModal(); changed(); toast("Tür adı değiştirildi"); });
+}
+function turSilModal(yon,ad){
+  const n=turKullanim(yon,ad), diger=turListe(yon).filter(x=>x!==ad), def=(yon==="gelir"?GELIR_TUR:GIDER_TUR).includes(ad);
+  modal("Türü kaldır",`<form class="form" id="tsForm"><div class="f w"><p style="margin:0"><b>${esc(ad)}</b> ${def?"hazır bir tür; listeden gizlenecek, istediğinizde geri getirebilirsiniz.":"listeden silinecek."}</p></div>
+    ${n?`<div class="f w"><label for="ts_t">Bu türdeki ${n} kayıt hangi türe taşınsın?</label><select id="ts_t">${diger.map(x=>`<option>${esc(x)}</option>`).join("")}<option value="">Türü boş bırak (raporda "atanmamış" görünür)</option></select></div>`:`<p class="hint f w">Bu tür hiçbir kayıtta kullanılmıyor.</p>`}
+    </form>`,`<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn danger" type="submit" form="tsForm">Kaldır</button></div>`);
+  $("#tsForm").addEventListener("submit",e=>{ e.preventDefault(); turKaldir(yon,ad,n?$("#ts_t").value:undefined); closeModal(); changed(); toast(`"${ad}" kaldırıldı`); });
+}
+Object.assign(ACT,{
+  turAd:el=>turAdModal(el.dataset.yon,el.dataset.ad),
+  turSil:el=>turSilModal(el.dataset.yon,el.dataset.ad),
+  turGeri:el=>{ if(!S.canWrite) return; turEkle(el.dataset.yon,el.dataset.ad); changed(); toast(`"${el.dataset.ad}" listeye geri eklendi`); }
 });
 
 /* ---------- gelir ve gider raporu ---------- */
@@ -2092,7 +2152,7 @@ function ggAta(){
     <p class="small muted" style="margin:0">Her faturaya bir tür seçin. "Bu cariye varsayılan yap" işaretlenirse, o carinin sonraki faturalarında bu tür kendiliğinden gelir.</p>
     <div class="tw" style="max-height:55vh;overflow:auto"><table><thead><tr><th>Tarih</th><th>Fatura</th><th>Cari</th><th class="r">Tutar</th><th>Tür</th><th>Varsayılan</th></tr></thead><tbody>
     ${L.map(h=>`<tr><td class="mono small">${trDate(h.tarih)}</td><td class="small">${TUR[h.tur]}<div class="muted">${esc(h.belgeNo||"")}</div></td><td>${esc(cariAd(h.cariId))}<div class="small muted">${esc(h.aciklama||"")}</div></td><td class="r amt">${m(tl(h))}</td>
-      <td><select data-ata="${h.id}"><option value="">— seçin —</option>${(h.tur==="satis"?GELIR_TUR:GIDER_TUR).map(t=>`<option ${S.cariler.get(h.cariId)?.varsayilanTur===t?"selected":""}>${t}</option>`).join("")}</select></td>
+      <td><select data-ata="${h.id}"><option value="">— seçin —</option>${turListe(h.tur==="satis"?"gelir":"gider").map(t=>`<option ${S.cariler.get(h.cariId)?.varsayilanTur===t?"selected":""}>${t}</option>`).join("")}</select></td>
       <td><input type="checkbox" data-vars="${h.id}" aria-label="Bu cariye varsayılan yap"></td></tr>`).join("")}
     </tbody></table></div></div>`,`<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" id="ataKaydet" data-w>Kaydet</button></div>`);
   $("#overlay .sheet").style.maxWidth="980px";
