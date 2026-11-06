@@ -2096,7 +2096,7 @@ function ggHesapla(bas,bit,kdvHaric,digerDahil){
     if(kdvHaric) t-=kdv;
     const tur=ggTur(h), ym=h.tarih.slice(0,7);
     const K=R[yon]; (K[tur]||(K[tur]={tutar:0,adet:0})).tutar+=t; K[tur].adet++;
-    const A=R.ay[ym]||(R.ay[ym]={g:0,c:0}); if(yon==="gelir"){ A.g+=t; R.topG+=t; } else { A.c+=t; R.topC+=t; }
+    const A=R.ay[ym]||(R.ay[ym]={g:0,c:0,hk:0,ik:0}); if(yon==="gelir"){ A.g+=t; R.topG+=t; } else { A.c+=t; R.topC+=t; } if(fat&&h.kdv>=0){ if(h.tur==="satis") A.hk+=kdv; else A.ik+=kdv; }
     if(h.cariId&&fat){ const M=yon==="gelir"?R.musteri:R.tedarikci; M[h.cariId]=(M[h.cariId]||0)+t; }
     if(fat&&!h.kategori) R.turAtanmamis.push(h);
     R.kalemler.push({h,yon,tur,t});
@@ -2106,6 +2106,11 @@ function ggHesapla(bas,bit,kdvHaric,digerDahil){
 function ggAylar(bas,bit){ const out=[]; let d=new Date(bas.slice(0,7)+"-01T00:00"); const e=bit.slice(0,7); while(iso(d).slice(0,7)<=e&&out.length<36){ out.push(iso(d).slice(0,7)); d.setMonth(d.getMonth()+1); } return out; }
 const AY_K=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ayAd = ym => AY_K[+ym.slice(5,7)-1]+" "+ym.slice(2,4);
+function kdvAylik(aylar,R){
+  let devir=0; return aylar.map(a=>{ const x=R.ay[a]||{}, g=x.g||0,c=x.c||0,hk=x.hk||0,ik=x.ik||0, fark=hk-ik-devir;
+    const r={a,g,c,hk,ik,net:g-c,devirGelen:devir,odenecek:fark>0.004?fark:0,devreden:fark<-0.004?-fark:0}; devir=r.devreden; return r; });
+}
+const kdvDurum = r => r.odenecek?`<span class="amt b">${m(r.odenecek)}</span><div class="small muted">Ödenecek</div>`:r.devreden?`<span class="amt a">${m(r.devreden)}</span><div class="small muted">Sonraki aya devreden</div>`:`<span class="amt z">0,00</span>`;
 function ggGrafikAylar(aylar,R){
   // gelecek ayları at; veri başlamadan önceki boş ayları kısalt (en az 6 ay göster)
   const buAy=TODAY.slice(0,7); let L=aylar.filter(a=>a<=buAy); if(!L.length) L=aylar.slice(0,1);
@@ -2133,7 +2138,7 @@ function ggIlk5(M,baslik){
 }
 function vGelirGider(){
   const f=S.view.gg||(S.view.gg={donem:"yil",bas:"",bit:"",kdv:"haric",diger:true});
-  const [bas,bit]=ggDonem(f), R=ggHesapla(bas,bit,f.kdv==="haric",f.diger), net=R.topG-R.topC, aylar=ggAylar(bas,bit);
+  const [bas,bit]=ggDonem(f), R=ggHesapla(bas,bit,f.kdv==="haric",f.diger), net=R.topG-R.topC, aylar=ggAylar(bas,bit), KA=kdvAylik(ggGrafikAylar(aylar,R),R);
   S.view.ggSon={bas,bit,R};
   const marj=R.topG?net/R.topG*100:0;
   const html=`<section class="panel"><div class="pad filters">
@@ -2155,10 +2160,10 @@ function vGelirGider(){
     <section class="panel"><header><h2>Giderler</h2><span class="small muted">Satırlara tıklayıp ayrıntıyı görün</span></header>${ggDagilim(R.gider,R.topC,"var(--borc)","gider")}</section>
   </div>
   <div class="grid2">${ggIlk5(R.musteri,"En çok satış yapılan 5 müşteri")}${ggIlk5(R.tedarikci,"En çok alış yapılan 5 tedarikçi")}</div>
-  <section class="panel"><header><h2>Aylık tablo</h2></header><div class="tw"><table><thead><tr><th>Ay</th><th class="r">Gelir</th><th class="r">Gider</th><th class="r">Net</th></tr></thead><tbody>
-  ${aylar.map(a=>{ const g=R.ay[a]?.g||0,c=R.ay[a]?.c||0; return `<tr><td>${ayAd(a)}</td><td class="r amt">${m(g)}</td><td class="r amt">${m(c)}</td><td class="r"><span class="amt ${g-c<-0.004?"b":""}">${m(g-c)}</span></td></tr>`; }).join("")}
-  </tbody><tfoot><tr><td>Toplam</td><td class="r amt">${m(R.topG)}</td><td class="r amt">${m(R.topC)}</td><td class="r amt">${m(net)}</td></tr></tfoot></table></div></section>
-  <p class="small muted">Gelir: satış faturaları${f.diger?" ve fatura dışı kasa/banka girişleri (POS tahsilatları hariç; bunlar satış faturalarının tahsilatıdır)":""}. Gider: alış faturaları${f.diger?" ve kasa/banka masrafları":""}. Tahsilat, ödeme, virman ve çek hareketleri gelir-gider değildir, dahil edilmez. Dövizli faturalar işlem kuruyla TL'ye çevrilir.${R.kdvBilinmeyen?` KDV oranı girilmemiş ${R.kdvBilinmeyen} fatura KDV dahil tutarıyla gösterildi.`:""}${f.kdv==="haric"?` Dönemde hesaplanan KDV ${money(R.hesKdv)}, indirilecek KDV ${money(R.indKdv)}.`:""} Vergi ödemeleri "Vergi / SGK" türünde gider olarak görünür; KDV ödemeleri gerçek gider değildir.</p>`;
+  <section class="panel"><header><h2>Aylık tablo</h2><span class="small muted">KDV sütunları yalnızca KDV oranı girilmiş faturalardan hesaplanır</span></header><div class="tw"><table><thead><tr><th>Ay</th><th class="r">Gelir</th><th class="r">Hesaplanan KDV</th><th class="r">Gider</th><th class="r">İndirilecek KDV</th><th class="r">Net</th><th class="r">KDV durumu</th></tr></thead><tbody>
+  ${KA.map(r=>`<tr><td>${ayAd(r.a)}</td><td class="r amt">${m(r.g)}</td><td class="r amt muted">${m(r.hk)}</td><td class="r amt">${m(r.c)}</td><td class="r amt muted">${m(r.ik)}</td><td class="r"><span class="amt ${r.net<-0.004?"b":""}">${m(r.net)}</span></td><td class="r">${kdvDurum(r)}${r.devirGelen?`<div class="small muted">(önceki aydan ${m(r.devirGelen)} devir)</div>`:""}</td></tr>`).join("")}
+  </tbody><tfoot><tr><td>Toplam</td><td class="r amt">${m(R.topG)}</td><td class="r amt">${m(R.hesKdv)}</td><td class="r amt">${m(R.topC)}</td><td class="r amt">${m(R.indKdv)}</td><td class="r amt">${m(net)}</td><td class="r">${kdvDurum(KA.length?KA[KA.length-1]:{})}<div class="small muted">dönem sonu</div></td></tr></tfoot></table></div></section>
+  <p class="small muted">Gelir: satış faturaları${f.diger?" ve fatura dışı kasa/banka girişleri (POS tahsilatları hariç; bunlar satış faturalarının tahsilatıdır)":""}. Gider: alış faturaları${f.diger?" ve kasa/banka masrafları":""}. Tahsilat, ödeme, virman ve çek hareketleri gelir-gider değildir, dahil edilmez. Dövizli faturalar işlem kuruyla TL'ye çevrilir.${R.kdvBilinmeyen?` KDV oranı girilmemiş ${R.kdvBilinmeyen} fatura KDV dahil tutarıyla gösterildi.`:""} KDV durumu = hesaplanan KDV − indirilecek KDV − önceki aydan devreden KDV; dönem başından önceki devir ve fatura dışı KDV kalemleri (ithalat, sorumlu sıfatıyla KDV vb.) hesaba katılmaz, beyanname yerine geçmez. Vergi ödemeleri "Vergi / SGK" türünde gider olarak görünür; KDV ödemeleri gerçek gider değildir.</p>`;
   return {title:`Gelir ve gider<span class="sub">${trDate(bas)} – ${trDate(bit)}</span>`,btns:`<button class="btn" data-act="ggYazdir">Yazdırılabilir rapor</button><button class="btn pri" data-act="ggExcel">Excel'e aktar</button>`,html,
     after(){ const ga=ggGrafikAylar(aylar,R); canliGrafik("#ggChart",W=>ggGrafik(W,ga,R));
       $("#gg_d").addEventListener("change",e=>{ f.donem=e.target.value; if(f.donem==="ozel"){ f.bas=bas; f.bit=bit; } render(); });
@@ -2195,7 +2200,7 @@ function ggRows(){
   const ozet=[["Gelir ve gider raporu",S.ayar?.firma?.unvan||""],["Dönem",`${trDate(bas)} – ${trDate(bit)}`],["Tutarlar",f.kdv==="haric"?"KDV hariç":"KDV dahil"],[],["Gelir türü","Adet","Tutar (TL)"],
     ...Object.entries(R.gelir).sort((a,b)=>b[1].tutar-a[1].tutar).map(([k,v])=>[k,v.adet,r2(v.tutar)]),["Toplam gelir","",r2(R.topG)],[],["Gider türü","Adet","Tutar (TL)"],
     ...Object.entries(R.gider).sort((a,b)=>b[1].tutar-a[1].tutar).map(([k,v])=>[k,v.adet,r2(v.tutar)]),["Toplam gider","",r2(R.topC)],[],[R.topG-R.topC>=0?"Dönem kârı":"Dönem zararı","",r2(R.topG-R.topC)]];
-  const aylik=[["Ay","Gelir (TL)","Gider (TL)","Net (TL)"],...ggAylar(bas,bit).map(a=>{ const g=R.ay[a]?.g||0,c=R.ay[a]?.c||0; return [ayAd(a),r2(g),r2(c),r2(g-c)]; })];
+  const aylik=[["Ay","Gelir (TL)","Hesaplanan KDV (TL)","Gider (TL)","İndirilecek KDV (TL)","Net (TL)","Ödenecek KDV (TL)","Sonraki aya devreden KDV (TL)"],...kdvAylik(ggGrafikAylar(ggAylar(bas,bit),R),R).map(r=>[ayAd(r.a),r2(r.g),r2(r.hk),r2(r.c),r2(r.ik),r2(r.net),r2(r.odenecek),r2(r.devreden)])];
   const detay=[["Tarih","Gelir/Gider","Tür","İşlem","Cari / hesap","Belge no","Açıklama","KDV %","Tutar (TL)"],...R.kalemler.slice().sort((a,b)=>a.h.tarih.localeCompare(b.h.tarih)).map(k=>[trDate(k.h.tarih),k.yon==="gelir"?"Gelir":"Gider",k.tur,TUR[k.h.tur],k.h.cariId?cariAd(k.h.cariId):hesapAd(k.h.hesapId),k.h.belgeNo||"",k.h.aciklama||"",k.h.kdv>=0?k.h.kdv:"",r2(k.t)])];
   return {ozet,aylik,detay,bas,bit,R,f};
 }
@@ -2208,12 +2213,12 @@ Object.assign(ACT,{
     const inner=`<h1>Gelir ve gider raporu</h1><p class="muted">${trDate(x.bas)} – ${trDate(x.bit)} · ${x.f.kdv==="haric"?"KDV hariç":"KDV dahil"} · TL</p>
     <table style="width:auto;min-width:360px"><tbody><tr><td>Toplam gelir</td><td class="r">${m(R.topG)}</td></tr><tr><td>Toplam gider</td><td class="r">${m(R.topC)}</td></tr><tr><td><b>${R.topG-R.topC>=0?"Dönem kârı":"Dönem zararı"}</b></td><td class="r"><b>${m(R.topG-R.topC)}</b></td></tr></tbody></table>
     <h2 style="font-size:15px;margin-top:22px">Gelirler</h2>${tab(R.gelir,R.topG,"Gelir türü")}<h2 style="font-size:15px;margin-top:22px">Giderler</h2>${tab(R.gider,R.topC,"Gider türü")}
-    <h2 style="font-size:15px;margin-top:22px">Aylık</h2><table><thead><tr><th>Ay</th><th class="r">Gelir</th><th class="r">Gider</th><th class="r">Net</th></tr></thead><tbody>${x.aylik.slice(1).map(r=>`<tr><td>${r[0]}</td><td class="r">${m(r[1])}</td><td class="r">${m(r[2])}</td><td class="r">${m(r[3])}</td></tr>`).join("")}</tbody></table>`;
+    <h2 style="font-size:15px;margin-top:22px">Aylık</h2><table><thead><tr><th>Ay</th><th class="r">Gelir</th><th class="r">Hesaplanan KDV</th><th class="r">Gider</th><th class="r">İndirilecek KDV</th><th class="r">Net</th><th class="r">KDV durumu</th></tr></thead><tbody>${x.aylik.slice(1).map(r=>`<tr><td>${r[0]}</td><td class="r">${m(r[1])}</td><td class="r">${m(r[2])}</td><td class="r">${m(r[3])}</td><td class="r">${m(r[4])}</td><td class="r">${m(r[5])}</td><td class="r">${r[6]?m(r[6])+" ödenecek":r[7]?m(r[7])+" devreden":"0,00"}</td></tr>`).join("")}</tbody></table>`;
     belgeAc(`Gelir_gider_${x.bas}_${x.bit}.html`,belgeHTML("Gelir ve gider raporu",inner)); }
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.1.0-önizleme";
+const SURUM="1.1.1-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
