@@ -414,21 +414,61 @@ async function saveNow(){
   saving=true;
   try{
     await gunlukYedek();
-    const fh=await S.dir.getFileHandle(S.file,{create:true});
+    const fh=await yolHandle(S.file,true);
+    let disk=""; try{ disk=await (await fh.getFile()).text(); }catch{}
+    if(S.sonMetin!=null && disk && disk!==S.sonMetin && await cakismaCoz(disk)) return;
     const txt=await paketle(); const w=await fh.createWritable(); await w.write(txt); await w.close();
-    dirty=false; const d=new Date(); setSave("Kaydedildi "+pad(d.getHours())+":"+pad(d.getMinutes()));
+    S.sonMetin=txt; dirty=false; const d=new Date(); setSave("Kaydedildi "+pad(d.getHours())+":"+pad(d.getMinutes()));
   }catch(e){ console.error(e); setSave("KAYDEDİLEMEDİ! Klasör izni veya disk sorunu",true); toast("Değişiklik dosyaya yazılamadı. Klasör izinlerini kontrol edin."); }
   finally{ saving=false; }
 }
 window.addEventListener("beforeunload",e=>{ if(dirty){ e.preventDefault(); e.returnValue=""; } });
+/* başka bilgisayarda (Drive ile eşitlenen klasörde) yapılan değişiklikler */
+async function diskVeri(metin){ try{ const f=JSON.parse(metin); if(!sifreli(f)) return null; const data=await coz(f,S.dek); return {f,data}; }catch{ return null; } }
+async function uzaktanYukle(v,metin){
+  if(!v.data.kullanicilar?.[S.u]){ dirty=false; return cikis("Bu firmadaki erişiminiz kaldırılmış."); }
+  for(const c of Object.keys(COLS)) v.data[c]=v.data[c]||{};
+  S.hdr=await hdrAc(v.f,v.data); S.data=v.data; S.sonMetin=metin; dirty=false;
+  const ku=v.data.kullanicilar[S.u]; S.rol=ku.rol; S.canEdit=ku.rol==="yonetici"; S.canWrite=ku.rol!=="izleyici";
+  document.body.classList.toggle("ro",!S.canWrite); document.body.classList.toggle("na",!S.canEdit);
+  for(const id of [...(S.sec||[])]) if(!S.data.hareketler[id]) S.sec.delete(id);
+  syncFromData(); compute(); const y=window.scrollY; render(); window.scrollTo(0,y);
+  const d=new Date(); setSave("Güncel "+pad(d.getHours())+":"+pad(d.getMinutes()));
+}
+// kaydederken dosya başka yerde değişmişse: bizim son halimizi yedeğe al, güncel hali yükle. true dönerse kaydetme yapılmaz.
+async function cakismaCoz(disk){
+  const v=await diskVeri(disk); if(!v) return false; // okunamayan (yarım eşitlenmiş vb.) dosya: bizimki yazılır
+  try{ const {dir,ad}=await yolCoz(S.file); const yd=await dir.getDirectoryHandle("yedek",{create:true});
+    await dosyaYaz(yd,ad.replace(/\.skypro\.json$/,"")+"_cakisma_"+new Date().toISOString().replace(/[:.]/g,"-")+".json",await paketle()); }catch(e){ console.warn("cakisma yedek",e); }
+  await uzaktanYukle(v,disk);
+  modal("Veriler başka bilgisayarda değiştirilmiş",`<div class="pad" style="display:flex;flex-direction:column;gap:10px">
+    <p style="margin:0">Bu firma siz çalışırken başka bir bilgisayarda da değiştirildi. Diğerinin kayıtları silinmesin diye <b>güncel hali yüklendi</b>.</p>
+    <p style="margin:0">Sizin son birkaç saniyede yaptığınız değişiklik ekranda yoksa lütfen yeniden girin. Sizin halinizin bir kopyası <b>yedek</b> klasörüne "çakışma" adıyla kaydedildi.</p>
+    <p class="small muted" style="margin:0">Aynı firmada aynı anda iki bilgisayardan kayıt girmeyin.</p></div>`,
+    `<span></span><div class="btns"><button class="btn pri" data-act="close">Tamam</button></div>`);
+  return true;
+}
+let uzakKontrolde=false;
+async function uzakKontrol(){
+  if(uzakKontrolde||!S.data||!S.file||!S.dek||dirty||saving) return;
+  if(!$("#overlay").hidden) return;
+  const a=document.activeElement; if(a&&a.closest?.("#view")&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)&&a.type!=="checkbox") return;
+  uzakKontrolde=true;
+  try{ const metin=await yolMetin(S.file); if(metin&&S.sonMetin!=null&&metin!==S.sonMetin&&!dirty){ const v=await diskVeri(metin); if(v&&!dirty){ await uzaktanYukle(v,metin); toast("Başka bilgisayardaki değişiklikler yüklendi"); } } }catch{}
+  finally{ uzakKontrolde=false; }
+}
+setInterval(uzakKontrol,20000);
+window.addEventListener("focus",()=>setTimeout(uzakKontrol,300));
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) setTimeout(uzakKontrol,300); });
 let yedekGunu=null;
 async function gunlukYedek(){
   if(yedekGunu===TODAY+S.file) return;
   try{
-    const fh=await S.dir.getFileHandle(S.file).catch(()=>null); if(!fh){ yedekGunu=TODAY+S.file; return; }
+    const fh=await yolHandle(S.file).catch(()=>null); if(!fh){ yedekGunu=TODAY+S.file; return; }
     const txt=await (await fh.getFile()).text(); if(!txt) return;
-    const yd=await S.dir.getDirectoryHandle("yedek",{create:true});
-    const base=S.file.replace(/\.skypro\.json$/,"");
+    const {dir:fd,ad:fa}=await yolCoz(S.file);
+    const yd=await fd.getDirectoryHandle("yedek",{create:true});
+    const base=fa.replace(/\.skypro\.json$/,"");
     const ad=`${base}_${TODAY}.json`;
     const var_=await yd.getFileHandle(ad).catch(()=>null);
     if(!var_){ const w=await (await yd.getFileHandle(ad,{create:true})).createWritable(); await w.write(txt); await w.close(); }
@@ -457,8 +497,17 @@ const kodNorm = k => String(k||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
 const normU = u => String(u||"").trim().toLocaleLowerCase("tr").replace(/ı/g,"i").replace(/i̇/g,"i");
 const uGecerli = u => /^[a-zçğöşü0-9._-]{3,32}$/.test(u);
 const sifreli = f => f && f.format==="skypro-enc-1";
-async function dosyaOku(ad){ return JSON.parse(await (await (await S.dir.getFileHandle(ad)).getFile()).text()); }
+/* firma dosyası yolu: "dosya.skypro.json" (klasörün kendisinde) veya "Alt klasör/dosya.skypro.json" (Drive'da firmayla paylaşılan alt klasör) */
+async function yolCoz(yol,create){ const p=String(yol).split("/"); let d=S.dir; for(const x of p.slice(0,-1)) d=await d.getDirectoryHandle(x,{create:!!create}); return {dir:d,ad:p[p.length-1]}; }
+async function yolHandle(yol,create){ const {dir,ad}=await yolCoz(yol,create); return dir.getFileHandle(ad,create?{create:true}:undefined); }
+async function yolMetin(yol){ return await (await (await yolHandle(yol)).getFile()).text(); }
+async function dosyaOku(ad){ return JSON.parse(await yolMetin(ad)); }
 async function dosyaYaz(dir,ad,text){ const w=await (await dir.getFileHandle(ad,{create:true})).createWritable(); await w.write(text); await w.close(); }
+async function yolYaz(yol,text){ const {dir,ad}=await yolCoz(yol,true); await dosyaYaz(dir,ad,text); }
+const klasorAdi = s => (String(s||"Firma").replace(/[<>:"/\\|?*\u0000-\u001f]/g," ").replace(/\s+/g," ").trim().replace(/[. ]+$/,"").slice(0,60))||"Firma";
+async function yeniFirmaYolu(unvan,kod,mevcut){ const klasorler=new Set([...mevcut].filter(x=>x.includes("/")).map(x=>x.split("/")[0].toLocaleLowerCase("tr")));
+  let k=klasorAdi(unvan); if(klasorler.has(k.toLocaleLowerCase("tr"))) k=klasorAdi(unvan+" "+(kod||"")); let i=2, b=k; while(klasorler.has(k.toLocaleLowerCase("tr"))) k=b+" "+(i++);
+  let ad; do ad=yeniDosyaAdi(); while(mevcut.has(k+"/"+ad)); return k+"/"+ad; }
 async function hdrKey(u){ return "u_"+b64(await crypto.subtle.digest("SHA-256",new TextEncoder().encode("skypro-u:"+u))).replace(/[+/=]/g,c=>({"+":"-","/":"_","=":""}[c])); }
 async function paketle(){
   const enc=await sifrele(S.data), ku={};
@@ -482,7 +531,11 @@ function startShow(html){ $("#app").hidden=true; $("#start").hidden=false; $("#s
 const panel = (h,body) => `<div class="panel">${h?`<header><h2>${h}</h2></header>`:""}${body}</div>`;
 async function dosyalariOku(){
   const out=[];
-  for await (const [n,h] of S.dir.entries()){ if(h.kind==="file"&&n.endsWith(".skypro.json")){ try{ const fl=await h.getFile(); out.push({dosya:n,f:JSON.parse(await fl.text()),mod:fl.lastModified}); }catch{} } }
+  const ekle=async(yol,h)=>{ try{ const fl=await h.getFile(); out.push({dosya:yol,f:JSON.parse(await fl.text()),mod:fl.lastModified}); }catch{} };
+  for await (const [n,h] of S.dir.entries()){
+    if(h.kind==="file"&&n.endsWith(".skypro.json")) await ekle(n,h);
+    else if(h.kind==="directory"&&n!=="yedek"&&!n.startsWith(".")){ try{ for await (const [n2,h2] of h.entries()) if(h2.kind==="file"&&n2.endsWith(".skypro.json")) await ekle(n+"/"+n2,h2); }catch{} }
+  }
   return out;
 }
 async function startScreen(mesaj){
@@ -586,6 +639,7 @@ function firmaSecim(){
   <div class="tw"><table><thead><tr><th>Firma</th><th>Yetki</th><th class="r">Alacak</th><th class="r">Borç</th><th class="r">Kasa + banka</th><th class="r">Portföy çek/senet</th><th class="r">Vadesi geçen alacak</th><th>Son işlem</th></tr></thead><tbody>
   ${L.map(r=>`<tr class="click" tabindex="0" data-act="firmaSec" data-i="${r.i}"><td><b>${esc(r.o.unvan)}</b><div class="small muted"><span class="mono">${esc(firmaKodu(r.x.data))}</span> · ${r.o.adet} işlem</div></td><td><span class="pill ${r.rol==="yonetici"?"warn":r.rol==="izleyici"?"":"ok"}">${ROL[r.rol]}</span></td><td class="r amt">${m(r.o.al)}</td><td class="r amt">${m(r.o.bo)}</td><td class="r amt">${m(r.o.na)}</td><td class="r amt">${m(r.o.ck)}</td><td class="r">${r.o.gec>0.004?`<span class="amt b">${m(r.o.gec)}</span>`:`<span class="amt z">0,00</span>`}</td><td class="mono small">${trDate(r.o.son)}</td></tr>`).join("")}
   </tbody><tfoot><tr><td colspan="2">Toplam (TL)</td><td class="r amt">${m(T.al)}</td><td class="r amt">${m(T.bo)}</td><td class="r amt">${m(T.na)}</td><td class="r amt">${m(T.ck)}</td><td class="r amt">${m(T.gec)}</td><td></td></tr></tfoot></table></div></div>
+  ${yon&&S.firmalar.some(x=>!x.dosya.includes("/"))?`<div class="notice small" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Google Drive'da her firmayı kendi e-postasıyla paylaşabilmek için firma dosyalarını <b>ayrı klasörlere</b> ayırın (${S.firmalar.filter(x=>!x.dosya.includes("/")).length} firma).</span><button class="btn sm pri" data-act="klasoreAyir">Firmaları ayrı klasörlere ayır</button></div>`:""}
   <div class="btns" style="justify-content:center">${yon?`<button class="btn" data-act="tumFirmaExcel">Tüm firmaların özeti (Excel)</button><button class="btn" data-act="yeniFirmaKur">Yeni firma oluştur</button>`:""}<button class="btn" data-act="cikisYap">Çıkış yap</button></div>`);
   S.secimOzet=L;
 }
@@ -663,12 +717,12 @@ function kurulumEkrani({data,dosya,baslik}){
     const hdr={kullanicilar:{[yu]:await sar(raw,v("s_yp"))},kurtarma:await sar(raw,kodNorm(kod))};
     if(fu){ d.kullanicilar[fu]={adSoyad:v("s_fa").trim()||fu,rol:v("s_fr"),olusturma:now}; hdr.kullanicilar[fu]=await sar(raw,v("s_fp")); }
     const mevcut=new Set((await dosyalariOku()).map(x=>x.dosya));
-    let ad=dosya; if(!ad){ do ad=yeniDosyaAdi(); while(mevcut.has(ad)); }
+    let ad=dosya; if(!ad) ad=await yeniFirmaYolu(un,fkod,mevcut);
     const key=await dekKey(raw);
     S.dek=key; S.hdr=hdr; S.data=d;
-    try{ await dosyaYaz(S.dir,ad,await paketle()); }catch{ return er("Dosya yazılamadı. Klasör iznini kontrol edin."); }
+    try{ await yolYaz(ad,await paketle()); }catch{ return er("Dosya yazılamadı. Klasör iznini kontrol edin."); }
     try{ localStorage.setItem("skypro_yonetici",JSON.stringify({u:yu,ad:v("s_ya").trim()})); }catch{}
-    if(dosya && $("#s_eskiSil")?.checked){ try{ const yd=await S.dir.getDirectoryHandle("yedek"); const base=ad.replace(/\.skypro\.json$/,""); const sil=[]; for await (const [n,h] of yd.entries()){ if(n.startsWith(base+"_")&&h.kind==="file"){ try{ if(!sifreli(JSON.parse(await (await h.getFile()).text()))) sil.push(n); }catch{} } } for(const n of sil) await yd.removeEntry(n); }catch{} }
+    if(dosya && $("#s_eskiSil")?.checked){ try{ const {dir:fd,ad:fa}=await yolCoz(ad); const yd=await fd.getDirectoryHandle("yedek"); const base=fa.replace(/\.skypro\.json$/,""); const sil=[]; for await (const [n,h] of yd.entries()){ if(n.startsWith(base+"_")&&h.kind==="file"){ try{ if(!sifreli(JSON.parse(await (await h.getFile()).text()))) sil.push(n); }catch{} } } for(const n of sil) await yd.removeEntry(n); }catch{} }
     kodGoster(kod,()=>{ S.firmalar=[{dosya:ad,raw,key,data:d,u:yu}]; girisYap({dosya:ad,raw,key,data:d,u:yu,hdr}); });
   });
 }
@@ -691,7 +745,9 @@ let sonHareket=Date.now(), oturumT=null;
 ["pointerdown","keydown"].forEach(ev=>document.addEventListener(ev,()=>sonHareket=Date.now(),true));
 async function girisYap({dosya,raw,key,data,u,hdr,mesaj}){
   // dosyayı tazeden oku (firma değişiminde son kaydedilen hali gelsin)
-  if(!hdr){ try{ const f=await dosyaOku(dosya); data=await coz(f,key); hdr=await hdrAc(f,data); }catch{ return toast("Firma dosyası açılamadı."); } }
+  let metin=null; try{ metin=await yolMetin(dosya); }catch{}
+  if(!hdr){ try{ const f=JSON.parse(metin); data=await coz(f,key); hdr=await hdrAc(f,data); }catch{ return toast("Firma dosyası açılamadı."); } }
+  S.sonMetin=metin;
   if(!data.kullanicilar?.[u]) return startScreen("Bu firmadaki erişiminiz kaldırılmış.");
   for(const c of Object.keys(COLS)) data[c]=data[c]||{};
   S.dek=key; S.dekRaw=raw; S.hdr=hdr; S.data=data; S.file=dosya; S.view={};
@@ -712,7 +768,7 @@ async function girisYap({dosya,raw,key,data,u,hdr,mesaj}){
 async function oturumKapat(){
   if(dirty){ clearTimeout(saveT); await saveNow(); }
   closeModal();
-  S.data=null; S.D=null; S.dek=null; S.dekRaw=null; S.hdr=null; S.file=null;
+  S.data=null; S.D=null; S.dek=null; S.dekRaw=null; S.hdr=null; S.file=null; S.sonMetin=null;
   history.replaceState(null,"",location.pathname); document.title="SKYPRO Ön Muhasebe";
   document.body.classList.remove("ro","na");
 }
@@ -775,7 +831,7 @@ async function parolaDegistir(e){
   for(const x of await dosyalariOku()){
     if(x.dosya===S.file||!sifreli(x.f)) continue;
     const hk=await hdrKey(S.u), w=x.f.kullanicilar?.[hk]||x.f.kullanicilar?.[S.u]; if(!w) continue;
-    try{ const raw=await sarAc(w,p0); const nw=await sar(raw,p1); if(x.f.kullanicilar[S.u]){ delete x.f.kullanicilar[S.u]; } x.f.kullanicilar[hk]=nw; await dosyaYaz(S.dir,x.dosya,JSON.stringify(x.f)); diger++;
+    try{ const raw=await sarAc(w,p0); const nw=await sar(raw,p1); if(x.f.kullanicilar[S.u]){ delete x.f.kullanicilar[S.u]; } x.f.kullanicilar[hk]=nw; await yolYaz(x.dosya,JSON.stringify(x.f)); diger++;
       const fx=S.firmalar?.find(y=>y.dosya===x.dosya); if(fx) fx.f=x.f; }catch{}
   }
   e.target.reset(); $("#pwErr").hidden=true; toast(diger?`Parolanız bu firma ve diğer ${diger} firmanızda değiştirildi`:"Parolanız değiştirildi");
@@ -1168,8 +1224,8 @@ function vAyar(){
     ${ornekVar?`<div class="notice warn">Bu firmada örnek kayıtlar var (sarı "örnek" etiketli).</div><div data-w><button class="btn danger" data-act="ornekSil">Örnek kayıtların hepsini sil</button></div>`:`<p class="small muted" style="margin:0">Örnek kayıt yok.</p>`}
   </div></section></div>
   <section class="panel"><header><h2>Veri dosyası</h2></header><div class="pad small" style="max-width:72ch;display:flex;flex-direction:column;gap:8px">
-    <p style="margin:0">Bu firma <b class="mono">${esc(S.file)}</b> dosyasında, <b>${esc(S.dir?.name||"")}</b> klasöründe saklanıyor. Her değişiklik anında dosyaya yazılır. Her gün ilk değişiklikten önce <b>yedek</b> alt klasörüne bir kopya alınır (son 30 gün saklanır).</p>
-    <p style="margin:0">Aynı firmayı aynı anda iki bilgisayarda açmayın; sonra kaydeden diğerinin değişikliklerinin üzerine yazar.</p>
+    <p style="margin:0">Bu firma <b class="mono">${esc(S.file.split("/").pop())}</b> dosyasında, <b>${esc(S.file.includes("/")?S.dir?.name+" › "+S.file.split("/")[0]:S.dir?.name||"")}</b> klasöründe saklanıyor. Her değişiklik anında dosyaya yazılır. Her gün ilk değişiklikten önce <b>yedek</b> alt klasörüne bir kopya alınır (son 30 gün saklanır).</p>
+    <p style="margin:0"><b>Google Drive ile ortak kullanım:</b> firma klasörü Drive'da firmanın e-posta adresiyle paylaşılırsa firma kendi bilgisayarında, mali müşavir kendisininkinde aynı veriyi görür. Program başka bilgisayarda yapılan değişiklikleri kendiliğinden yükler. Aynı firmada aynı anda iki bilgisayardan kayıt girmeyin; olursa diğerinin kayıtları korunur, sizin son haliniz yedek klasörüne alınır.</p>
     <p style="margin:0">Dosya parolayla şifrelidir (AES-256). Kullanıcı adı ve parolası olmayan biri dosyayı kopyalasa da içeriğini okuyamaz.</p>
     <div class="btns"><button class="btn" data-act="mmGonder">Mali müşavire gönderilecek dosyayı indir</button></div>
     <p class="small muted" style="margin:0">İndirilen dosya şifreli kalır. Mali müşavir kendi programında <b>Dosyadan ekle</b> ile alır ve kendi yönetici parolasıyla açar.</p>
@@ -1661,6 +1717,26 @@ document.addEventListener("click",e=>{
 /* ---------- başlatma ---------- */
 Object.assign(ACT,{
   async klasorSec(){ try{ const d=await window.showDirectoryPicker({id:"skypro",mode:"readwrite"}); S.dir=d; await kvSet("dir",d); startScreen(); }catch(e){ if(e?.name!=="AbortError") toast("Klasör seçilemedi."); } },
+  async klasoreAyir(el){
+    const L=(S.firmalar||[]).filter(x=>!x.dosya.includes("/")&&x.data.kullanicilar?.[x.u]?.rol==="yonetici"); if(!L.length) return;
+    if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent=`${L.length} firma kendi klasörüne taşınsın mı? Onayla`; return; }
+    el.disabled=true; el.textContent="Taşınıyor…";
+    const mevcut=new Set((await dosyalariOku()).map(x=>x.dosya)); let n=0; const hata=[];
+    let ryd=null; try{ ryd=await S.dir.getDirectoryHandle("yedek"); }catch{}
+    for(const x of L){
+      try{
+        const metin=await yolMetin(x.dosya), un=x.data.ayar?.firma?.unvan||"Firma";
+        let k=(await yeniFirmaYolu(un,firmaKodu(x.data),mevcut)).split("/")[0], hedef=k+"/"+x.dosya;
+        await yolYaz(hedef,metin); if(await yolMetin(hedef)!==metin) throw new Error("doğrulama");
+        if(ryd){ const base=x.dosya.replace(/\.skypro\.json$/,""), {dir}=await yolCoz(hedef), yd=await dir.getDirectoryHandle("yedek",{create:true}), tas=[];
+          for await (const [n2,h] of ryd.entries()) if(h.kind==="file"&&n2.startsWith(base+"_")) tas.push([n2,h]);
+          for(const [n2,h] of tas){ await dosyaYaz(yd,n2,await (await h.getFile()).text()); await ryd.removeEntry(n2); } }
+        await S.dir.removeEntry(x.dosya);
+        mevcut.delete(x.dosya); mevcut.add(hedef); x.dosya=hedef; n++;
+      }catch(e){ console.warn("klasore ayir",e); hata.push(x.data.ayar?.firma?.unvan||x.dosya); }
+    }
+    firmaSecim(); toast(`${n} firma kendi klasörüne taşındı${hata.length?`; taşınamayan: ${hata.join(", ")}`:""}`);
+  },
   async izinVer(){ try{ const p=await S.dir.requestPermission({mode:"readwrite"}); if(p==="granted") startScreen(); else toast("İzin verilmeden veriler okunamaz."); }catch{ toast("İzin alınamadı; klasörü yeniden seçin."); } },
   firmaSec:el=>{ const x=S.firmalar?.[+el.dataset.i]; if(x) girisYap(x); },
   async firmaDegistir(){ await oturumKapat(); firmaSecim(); },
@@ -2750,7 +2826,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.5.4-önizleme";
+const SURUM="1.6.0-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
