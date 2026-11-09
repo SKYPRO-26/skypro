@@ -2219,7 +2219,7 @@ function secCubukGuncelle(){
   const L=seciliKayitlar(); if(!L.length){ el.hidden=true; el.innerHTML=""; return; }
   let b=0,a=0; for(const h of L){ b+=cariBorc(h)*(h.kur||1); a+=cariAlacak(h)*(h.kur||1); }
   el.hidden=false;
-  el.innerHTML=`<b>${L.length} kayıt seçildi</b><span class="small">${b?`Borç <span class="amt">${m(b)}</span>`:""}${b&&a?" · ":""}${a?`Alacak <span class="amt">${m(a)}</span>`:""}</span><span style="flex:1"></span><div class="btns"><button class="btn sm" data-act="topluDegistir">Değiştir</button><button class="btn sm danger" data-act="topluSil">Sil</button><button class="btn sm" data-act="secTemizle">Seçimi kaldır</button></div>`;
+  el.innerHTML=`<b>${L.length} kayıt seçildi</b><span class="small">${b?`Borç <span class="amt">${m(b)}</span>`:""}${b&&a?" · ":""}${a?`Alacak <span class="amt">${m(a)}</span>`:""}</span><span style="flex:1"></span><div class="btns"><button class="btn sm" data-act="topluDegistir">Değiştir</button>${modulAcik("tahakkuk")?`<button class="btn sm" data-act="stkSecili">STK belge no ver</button>`:""}<button class="btn sm danger" data-act="topluSil">Sil</button><button class="btn sm" data-act="secTemizle">Seçimi kaldır</button></div>`;
   document.querySelectorAll("[data-secall]").forEach(x=>{ const ids=x.dataset.secall?x.dataset.secall.split(","):[]; x.checked=ids.length&&ids.every(i=>S.sec.has(i)); x.indeterminate=!x.checked&&ids.some(i=>S.sec.has(i)); });
 }
 document.addEventListener("change",e=>{
@@ -2325,12 +2325,41 @@ function tkKayitlar(ay){ const M=new Map(); for(const h of S.hareketler){ if(h.t
 const STK_BAS="2026-01-01";
 const stkNo = (yil,n) => "STK"+yil+String(n).padStart(9,"0");
 const stkMi = (no,yil) => new RegExp("^STK"+(yil||"\\d{4}")+"\\d{9}$").test(no||"");
-function stkSonSira(yil){ let n=0; for(const h of S.hareketler){ if(h.tur!=="satis"||!h.tahakkukId||!stkMi(h.belgeNo,yil)) continue; n=Math.max(n,+h.belgeNo.slice(7)); } return n; }
+function stkSonSira(yil){ let n=0; for(const h of S.hareketler){ if(h.tur!=="satis"||!stkMi(h.belgeNo,yil)) continue; n=Math.max(n,+h.belgeNo.slice(7)); } return n; }
 function tkYeniler(ay){ const A=tkAyar(), yap=tkYapilan(ay);
   return sortedCariler().filter(c=>c.doviz==="TRY").map(c=>({c,h:tkHesap(A.ucret[c.id],A.mod)})).filter(x=>(x.h.net>0||x.h.brut>0)&&!yap.has(x.c.id)); }
 function tkPlanNo(ay,tarih){ const M=new Map(); if(tarih<STK_BAS) return M; const y=tarih.slice(0,4); let n=stkSonSira(y); for(const {c} of tkYeniler(ay)) M.set(c.id,stkNo(y,++n)); return M; }
 function stkEksikler(){ return S.hareketler.filter(h=>h.tur==="satis"&&h.tahakkukId&&h.tarih>=STK_BAS&&!stkMi(h.belgeNo,h.tarih.slice(0,4)))
   .sort((a,b)=>a.tarih.localeCompare(b.tarih)||(a.tahakkukAy||"").localeCompare(b.tahakkukAy||"")||(S.cariler.get(a.cariId)?.kod||"").localeCompare(S.cariler.get(b.cariId)?.kod||"","tr")||(a.at||"").localeCompare(b.at||"")); }
+/* seçilen eski tahakkuk kayıtlarına STK numarası: seçilenler + zaten STK almış olanlar tarih sırasına göre baştan numaralanır */
+function stkSeciliModal(){
+  const sec=seciliKayitlar(), fat=sec.filter(h=>h.tur==="satis"), atla=[];
+  for(const h of sec){ if(h.tur!=="satis") atla.push("satış faturası değil"); else if(h.tarih<STK_BAS) atla.push("01.01.2026 öncesi"); else if(kilitli(h.tarih)) atla.push("kilitli dönemde"); }
+  const yeni=fat.filter(h=>h.tarih>=STK_BAS&&!kilitli(h.tarih));
+  if(!yeni.length) return toast(sec.length?`Numara verilecek kayıt yok: ${nedenOzet(atla)}.`:"Önce kayıtları seçin.");
+  const ids=new Set(yeni.map(h=>h.id));
+  const tum=[...yeni,...S.hareketler.filter(h=>h.tur==="satis"&&!ids.has(h.id)&&h.tarih>=STK_BAS&&stkMi(h.belgeNo,h.tarih.slice(0,4)))]
+    .sort((a,b)=>a.tarih.localeCompare(b.tarih)||(S.cariler.get(a.cariId)?.kod||"").localeCompare(S.cariler.get(b.cariId)?.kod||"","tr")||(a.at||"").localeCompare(b.at||""));
+  const sira={}, plan=tum.map(h=>{ const y=h.tarih.slice(0,4); sira[y]=(sira[y]||0)+1; return {h,no:stkNo(y,sira[y])}; });
+  const degisen=plan.filter(x=>x.h.belgeNo!==x.no), kilitDeg=degisen.filter(x=>!ids.has(x.h.id)&&kilitli(x.h.tarih));
+  if(kilitDeg.length) return toast("Daha önce numara verilmiş bazı kayıtlar kilitli dönemde; sıra bozulmasın diye işlem yapılmadı.");
+  modal("STK belge numarası ver",`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
+    <p style="margin:0"><b>${yeni.length} satış faturasına</b> STK belge numarası verilecek. Daha önce numara almış ${tum.length-yeni.length} kayıtla birlikte tüm numaralar <b>tarih sırasına göre</b> (aynı gün cari koduna göre) baştan dizilir; ${degisen.length} kaydın numarası değişecek.</p>
+    <div class="tw" style="max-height:260px;overflow:auto"><table><thead><tr><th>Tarih</th><th>Cari</th><th>Eski no</th><th>Yeni no</th></tr></thead><tbody>
+    ${degisen.slice(0,200).map(x=>`<tr${ids.has(x.h.id)?"":' class="muted"'}><td class="mono small">${trDate(x.h.tarih)}</td><td class="small">${esc(cariAd(x.h.cariId))}</td><td class="mono small">${esc(x.h.belgeNo||"—")}</td><td class="mono small"><b>${x.no}</b></td></tr>`).join("")}</tbody></table></div>
+    <label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="stkTk" checked> Seçilen faturaları, tarihlerindeki ayın tahakkuku olarak işaretle (Aylık tahakkuk ekranında "Tahakkuk edildi" görünür, aynı ay ikinci kez tahakkuk edilmez)</label>
+    ${atla.length?`<div class="notice warn small">${nedenOzet(atla)} olduğu için atlanacak.</div>`:""}</div>`,
+    `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" id="stkGo">Numaraları ver</button></div>`);
+  $("#stkGo").addEventListener("click",()=>{
+    const tk=$("#stkTk").checked, hs=Object.values(S.data.hareketler), st=stamp();
+    for(const {h,no} of degisen){ const eski=h.belgeNo||"";
+      for(const x of hs) if(x.id===h.id||(eski&&x.tur==="alacak_dekont"&&x.cariId===h.cariId&&x.tarih===h.tarih&&(x.belgeNo||"")===eski&&(x.tahakkukId||"")===(h.tahakkukId||""))){ x.belgeNo=no; } }
+    if(tk) for(const h0 of yeni){ const h=S.data.hareketler[h0.id]; if(!h.tahakkukAy){ h.tahakkukAy=h.tarih.slice(0,7); h.tahakkukId="eski-"+h.tahakkukAy; } }
+    for(const h of yeni) S.data.hareketler[h.id].duzenleme={...st};
+    S.sec.clear(); closeModal(); changed(); toast(`${yeni.length} faturaya STK numarası verildi${degisen.length>yeni.length?`, ${degisen.length-yeni.length} kaydın numarası sıraya göre güncellendi`:""}`);
+  });
+}
+Object.assign(ACT,{ stkSecili:()=>stkSeciliModal() });
 function vTahakkuk(){
   if(!modulAcik("tahakkuk")) return {title:"Aylık tahakkuk",btns:" ",html:`<div class="notice">Bu modül bu firmada kapalı. Yönetici <a href="#ayarlar">Ayarlar → Ek modüller</a> bölümünden açabilir.</div>`};
   const A=tkAyar(), f=S.view.tk||(S.view.tk={ay:TODAY.slice(0,7),tumu:false,q:""}), P=tkPlan(), K=tkKayitlar(f.ay), L=tkListe(), brut=A.mod==="brut", dis=S.canWrite?"":"disabled";
@@ -2721,7 +2750,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.5.3-önizleme";
+const SURUM="1.5.4-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
