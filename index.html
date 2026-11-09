@@ -2300,6 +2300,14 @@ Object.assign(ACT,{ topluSil:()=>topluSilModal(), topluDegistir:()=>topluDegisti
 const AY_TAM=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 const ayTam = ym => AY_TAM[+ym.slice(5,7)-1]+" "+ym.slice(0,4);
 const aySonu = ym => iso(new Date(+ym.slice(0,4),+ym.slice(5,7),0));
+const ayKaydir = (ym,n) => { const d=new Date(+ym.slice(0,4),+ym.slice(5,7)-1+n,1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); };
+function tkAySecici(ay,on){ const y=+ay.slice(0,4), ty=+TODAY.slice(0,4), yillar=[]; for(let i=Math.min(y,ty-5);i<=Math.max(y,ty+1);i++) yillar.push(i);
+  return `<div style="display:flex;gap:4px;align-items:center"><button type="button" class="btn sm" id="${on}_onc" title="Önceki ay" aria-label="Önceki ay">‹</button>
+  <select id="${on}_ay" aria-label="Ay">${AY_TAM.map((a,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${+ay.slice(5,7)===i+1?"selected":""}>${a}</option>`).join("")}</select>
+  <select id="${on}_yil" aria-label="Yıl">${yillar.map(v=>`<option ${v===y?"selected":""}>${v}</option>`).join("")}</select>
+  <button type="button" class="btn sm" id="${on}_snr" title="Sonraki ay" aria-label="Sonraki ay">›</button></div>`; }
+function tkAySeciciBagla(on,ay,degis){ $("#"+on+"_onc").addEventListener("click",()=>degis(ayKaydir(ay,-1))); $("#"+on+"_snr").addEventListener("click",()=>degis(ayKaydir(ay,1)));
+  const al=()=>degis($("#"+on+"_yil").value+"-"+$("#"+on+"_ay").value); $("#"+on+"_ay").addEventListener("change",al); $("#"+on+"_yil").addEventListener("change",al); }
 const sonrakiAySonu = d => iso(new Date(+d.slice(0,4),+d.slice(5,7)+1,0));
 const modulAcik = ad => !!S.ayar?.moduller?.[ad];
 function tkAyar(){ const a=S.data.tahakkuk||(S.data.tahakkuk={mod:"net",ucret:{},gecmis:[]}); a.ucret=a.ucret||{}; a.gecmis=a.gecmis||[]; a.mod=a.mod||"net"; return a; }
@@ -2315,10 +2323,9 @@ function tkKayitlar(ay){ const M=new Map(); for(const h of S.hareketler){ if(h.t
 function vTahakkuk(){
   if(!modulAcik("tahakkuk")) return {title:"Aylık tahakkuk",btns:" ",html:`<div class="notice">Bu modül bu firmada kapalı. Yönetici <a href="#ayarlar">Ayarlar → Ek modüller</a> bölümünden açabilir.</div>`};
   const A=tkAyar(), f=S.view.tk||(S.view.tk={ay:TODAY.slice(0,7),tumu:false,q:""}), P=tkPlan(), K=tkKayitlar(f.ay), L=tkListe(), brut=A.mod==="brut", dis=S.canWrite?"":"disabled";
-  const aylar=[]; { const d=new Date(+TODAY.slice(0,4),+TODAY.slice(5,7)-13,1); for(let i=0;i<15;i++){ aylar.push(iso(d).slice(0,7)); d.setMonth(d.getMonth()+1); } }
   const bekleyen=L.filter(c=>!K.has(c.id)&&tkHesap(A.ucret[c.id],A.mod).net>0).length;
   const html=`<section class="panel"><div class="pad filters" style="align-items:end">
-    <label>Tahakkuk ayı<select id="tk_ay">${aylar.map(a=>`<option value="${a}" ${f.ay===a?"selected":""}>${ayTam(a)}</option>`).join("")}</select></label>
+    <label>Tahakkuk ayı${tkAySecici(f.ay,"tk")}</label>
     <label>Kayıt tarihi<input type="date" id="tk_t" value="${P.tarih}" ${dis}></label>
     <label>Vade (sonraki ay sonu)<input type="date" id="tk_v" value="${P.vade}" ${dis}></label>
     <label>Gelir türü<input type="text" id="tk_k" list="tkKatList" value="${esc(P.kat)}" style="width:170px" ${dis}><datalist id="tkKatList">${turListe("gelir").map(t=>`<option value="${esc(t)}">`).join("")}</datalist></label>
@@ -2350,7 +2357,7 @@ function vTahakkuk(){
   </tbody></table></div></section>`:""}`;
   return {title:`Aylık tahakkuk<span class="sub">${esc(ayTam(f.ay))} · kayıt tarihi ${trDate(P.tarih)} · ${K.size} müşteri tahakkuk edildi</span>`,btns:`<button class="btn pri" data-act="tkYap" data-w>${esc(ayTam(f.ay))} tahakkukunu yap</button>`,html,after(){
     tkToplam();
-    $("#tk_ay").addEventListener("change",e=>{ f.ay=e.target.value; render(); });
+    tkAySeciciBagla("tk",f.ay,a=>{ f.ay=a; render(); });
     $("#tk_t")?.addEventListener("change",e=>{ if(!e.target.value) return; f.tarih=e.target.value; f.vade=sonrakiAySonu(f.tarih); render(); });
     $("#tk_v")?.addEventListener("change",e=>{ if(!e.target.value) return; f.vade=e.target.value; render(); });
     $("#tk_k")?.addEventListener("change",e=>{ A.kategori=e.target.value.trim()||"Hizmet geliri"; scheduleSave(); });
@@ -2387,12 +2394,14 @@ function tkYapModal(){
   const L=sortedCariler().filter(c=>c.doviz==="TRY").map(c=>({c,h:tkHesap(A.ucret[c.id],A.mod)})).filter(x=>x.h.net>0||x.h.brut>0);
   const yeni=L.filter(x=>!yap.has(x.c.id)), eski=L.length-yeni.length, top=yeni.reduce((s,x)=>s+x.h.net,0);
   if(!L.length) return toast("Önce tabloya aylık ücretleri yazın.");
-  if(kilitli(P.tarih)) return toast(`Kayıt tarihi ${trDate(P.tarih)} kilitli dönemde; tablonun üstünden tarihi değiştirin.`);
+  const kilit=kilitli(P.tarih);
   modal(`${ayTam(ay)} tahakkuku`,`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
+    <label>Tahakkuk yapılacak ay${tkAySecici(ay,"tkm")}</label>
     <p style="margin:0">${yeni.length?`<b>${yeni.length} müşterinin</b> carisine toplam <b>${money(top)}</b> işlenecek.`:"Bu ay için tahakkuk edilecek müşteri kalmadı."}${eski?` ${eski} müşteri bu ay zaten tahakkuk edildiği için atlanacak.`:""}</p>
     <dl class="info"><dt>Kayıt tarihi</dt><dd class="mono">${trDate(P.tarih)}</dd><dt>Vade</dt><dd class="mono">${P.vade?trDate(P.vade):"—"}</dd><dt>Gelir türü</dt><dd>${esc(P.kat)}</dd><dt>Açıklama</dt><dd>${esc(P.ack)}</dd><dt>Belge no</dt><dd class="mono">${esc(P.belge)}</dd></dl>
-    <p class="small muted" style="margin:0">Her müşteri için cariye "Satış faturası" kaydı (gelir raporunda görünür)${A.mod==="brut"?" ve stopajı işaretli müşterilerde stopaj kadar alacak dekontu":""} oluşturulur. Bilgileri değiştirmek için pencereyi kapatıp tablonun üstündeki alanları düzenleyin.</p></div>`,
-    `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button>${yeni.length?`<button class="btn pri" id="tkGo">Tahakkuk yap</button>`:""}</div>`);
+    <p class="small muted" style="margin:0">Her müşteri için cariye "Satış faturası" kaydı (gelir raporunda görünür)${A.mod==="brut"?" ve stopajı işaretli müşterilerde stopaj kadar alacak dekontu":""} oluşturulur. Ayı değiştirince kayıt tarihi o ayın sonu, vade bir sonraki ayın sonu olur. Diğer bilgileri değiştirmek için pencereyi kapatıp tablonun üstündeki alanları düzenleyin.</p></div>`,
+    `${kilit?`<span class="pill bad">Kayıt tarihi ${trDate(P.tarih)} kilitli dönemde</span>`:"<span></span>"}<div class="btns"><button class="btn" data-act="close">Vazgeç</button>${yeni.length&&!kilit?`<button class="btn pri" id="tkGo">Tahakkuk yap</button>`:""}</div>`);
+  tkAySeciciBagla("tkm",ay,a=>{ S.view.tk.ay=a; render(); tkYapModal(); });
   $("#tkGo")?.addEventListener("click",()=>{
     if(!katListe().some(x=>x.toLocaleLowerCase("tr")===P.kat.toLocaleLowerCase("tr"))) turEkle("gelir",P.kat);
     const tid=uid("tk"), st=stamp(), simdi=tkYapilan(ay); let n=0, top=0;
@@ -2689,7 +2698,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.5.1";
+const SURUM="1.5.2";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
