@@ -104,6 +104,24 @@ tfoot td{font-weight:600;background:var(--surface-2);border-top:1px solid var(--
 .pill.ok{background:var(--alacak-soft);color:var(--alacak)}
 .pill.bad{background:var(--borc-soft);color:var(--borc)}
 .pill.warn{background:var(--warn-soft);color:var(--warn)}
+.is-grp{margin:0;padding:0;list-style:none}
+.is-grp li{display:flex;gap:12px;align-items:flex-start;padding:10px 18px;border-top:1px solid var(--line)}
+.is-grp li:first-child{border-top:0}
+.is-chk{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--muted);background:transparent;cursor:pointer;margin-top:1px;display:grid;place-items:center;padding:0;color:#fff;font-size:13px;line-height:1}
+.is-chk:hover{border-color:var(--alacak)}
+.is-chk.on{background:var(--alacak);border-color:var(--alacak)}
+.is-body{flex:1;min-width:0}
+.is-body b{font-weight:600}
+.is-bitti .is-body b{text-decoration:line-through;opacity:.65}
+.is-meta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:3px}
+.is-ack{white-space:pre-wrap;margin-top:3px}
+.is-grp-h{padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--surface-2)}
+.is-not-li{padding:0 18px 14px 52px!important;border-top:0!important}
+.is-not{display:flex;flex-direction:column;gap:6px;width:100%}
+.is-not textarea{width:100%;resize:vertical;min-height:90px}
+.is-acik,.is-acik+.is-not-li{background:var(--surface-2)}
+.is-hizli{display:flex;gap:8px;flex-wrap:wrap;padding:12px 18px;align-items:center}
+.is-hizli input[type=text]{flex:1;min-width:220px}
 .pill.acc{background:var(--accent-soft);color:var(--accent)}
 .pill.ex{background:var(--warn-soft);color:var(--warn);font-size:11px}
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
@@ -216,6 +234,7 @@ tr.secili td{background:var(--accent-soft)!important}
     <div class="brand"><div class="logo"><svg class="mk" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="skg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a7aa0"/><stop offset="1" stop-color="#12415a"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#skg)"/><path d="M14 46.5h36M14 51.5h36" stroke="#9fd0e6" stroke-width="2.6" stroke-linecap="round" opacity=".75"/><path d="M14 37 L25 26.5 L34 33 L49 17.5" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 17 H49.5 V26.5" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg><b>SKY<span>PRO</span></b></div><span id="firmName">Ön muhasebe</span></div>
     <ul id="navList">
       <li><a href="#ozet">Özet</a></li>
+      <li><a href="#isler">Yapılacak işler <span class="cnt" id="isCnt" hidden></span></a></li>
       <li><a href="#hizli-giris">Hızlı kayıt</a></li>
       <li><a href="#cariler">Cari hesaplar</a></li>
       <li id="navTk" hidden><a href="#tahakkuk">Aylık tahakkuk</a></li>
@@ -523,6 +542,7 @@ async function hdrAc(f,data){ const ku={}; for(const u of Object.keys(data.kulla
 const slug = s => (String(s||"firma").toLocaleLowerCase("tr").replace(/ı/g,"i").replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ö/g,"o").replace(/ç/g,"c").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40))||"firma";
 const yeniDosyaAdi = () => "firma-"+Array.from(rnd(5),b=>"abcdefghjkmnpqrstuvwxyz23456789"[b%31]).join("")+".skypro.json";
 
+const DRIVE_ACIK=false; // Google Drive ile firma başına klasör paylaşımı: şimdilik kapalı
 /* klasör */
 function klasorHata(t){ startShow(panel("",`<div class="pad" style="display:flex;flex-direction:column;gap:12px"><div class="notice bad">${esc(t)}</div>
   <p class="small muted" style="margin:0">Google Drive kullanıyorsanız: klasör seçme penceresinde soldan <b>Google Drive (G:)</b> → <b>Drive'ım</b> → <b>SKYPRO</b> klasörüne girip <b>Klasörü seç</b>'e basın. Drive'ın kendisini (G:) ya da Drive'ım'ı değil, içindeki SKYPRO klasörünü seçin.</p>
@@ -600,7 +620,7 @@ async function startScreen(mesaj){
     if(!acilan.length && kodGerek && !kod){ return hata("Firma kodunu girin."); }
     if(!acilan.length){ hataSay++; if(hataSay>=5) bekle=Date.now()+30000*(hataSay-4); $("#g_p").value=""; $("#g_p").focus(); return hata("Kullanıcı adı veya parola hatalı."); }
     hataSay=0; S.firmalar=acilan; try{ if(kod) localStorage.setItem("skypro_sonkod",$("#g_k").value.trim()); }catch{}
-    if(acilan.length===1 && !(acilan[0].data.kullanicilar[acilan[0].u]?.rol==="yonetici" && !acilan[0].dosya.includes("/"))) return girisYap(acilan[0]);
+    if(acilan.length===1 && !(DRIVE_ACIK && acilan[0].data.kullanicilar[acilan[0].u]?.rol==="yonetici" && !acilan[0].dosya.includes("/"))) return girisYap(acilan[0]);
     firmaSecim();
   });
 }
@@ -645,7 +665,7 @@ function firmaSecim(){
   <div class="tw"><table><thead><tr><th>Firma</th><th>Yetki</th><th class="r">Alacak</th><th class="r">Borç</th><th class="r">Kasa + banka</th><th class="r">Portföy çek/senet</th><th class="r">Vadesi geçen alacak</th><th>Son işlem</th></tr></thead><tbody>
   ${L.map(r=>`<tr class="click" tabindex="0" data-act="firmaSec" data-i="${r.i}"><td><b>${esc(r.o.unvan)}</b><div class="small muted"><span class="mono">${esc(firmaKodu(r.x.data))}</span> · ${r.o.adet} işlem</div></td><td><span class="pill ${r.rol==="yonetici"?"warn":r.rol==="izleyici"?"":"ok"}">${ROL[r.rol]}</span></td><td class="r amt">${m(r.o.al)}</td><td class="r amt">${m(r.o.bo)}</td><td class="r amt">${m(r.o.na)}</td><td class="r amt">${m(r.o.ck)}</td><td class="r">${r.o.gec>0.004?`<span class="amt b">${m(r.o.gec)}</span>`:`<span class="amt z">0,00</span>`}</td><td class="mono small">${trDate(r.o.son)}</td></tr>`).join("")}
   </tbody><tfoot><tr><td colspan="2">Toplam (TL)</td><td class="r amt">${m(T.al)}</td><td class="r amt">${m(T.bo)}</td><td class="r amt">${m(T.na)}</td><td class="r amt">${m(T.ck)}</td><td class="r amt">${m(T.gec)}</td><td></td></tr></tfoot></table></div></div>
-  ${yon&&S.firmalar.some(x=>!x.dosya.includes("/"))?`<div class="notice small" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Google Drive'da her firmayı kendi e-postasıyla paylaşabilmek için firma dosyalarını <b>ayrı klasörlere</b> ayırın (${S.firmalar.filter(x=>!x.dosya.includes("/")).length} firma).</span><button class="btn sm pri" data-act="klasoreAyir">Firmaları ayrı klasörlere ayır</button></div>`:""}
+  ${DRIVE_ACIK&&yon&&S.firmalar.some(x=>!x.dosya.includes("/"))?`<div class="notice small" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Google Drive'da her firmayı kendi e-postasıyla paylaşabilmek için firma dosyalarını <b>ayrı klasörlere</b> ayırın (${S.firmalar.filter(x=>!x.dosya.includes("/")).length} firma).</span><button class="btn sm pri" data-act="klasoreAyir">Firmaları ayrı klasörlere ayır</button></div>`:""}
   <div class="btns" style="justify-content:center">${yon?`<button class="btn" data-act="tumFirmaExcel">Tüm firmaların özeti (Excel)</button><button class="btn" data-act="yeniFirmaKur">Yeni firma oluştur</button>`:""}<button class="btn" data-act="cikisYap">Çıkış yap</button></div>`);
   S.secimOzet=L;
 }
@@ -854,7 +874,7 @@ function dbErr(){}
 
 
 /* ---------- yönlendirme ---------- */
-const TITLES={ozet:"Özet",tahakkuk:"Aylık tahakkuk",["hizli-giris"]:"Hızlı kayıt",cariler:"Cari hesaplar",islemler:"Tahsilat ve ödeme",["cek-senet"]:"Çek ve senet",["kasa-banka"]:"Kasa ve banka",vade:"Vade takvimi",["gelir-gider"]:"Gelir ve gider",raporlar:"Raporlar",ayarlar:"Ayarlar"};
+const TITLES={ozet:"Özet",isler:"Yapılacak işler",tahakkuk:"Aylık tahakkuk",["hizli-giris"]:"Hızlı kayıt",cariler:"Cari hesaplar",islemler:"Tahsilat ve ödeme",["cek-senet"]:"Çek ve senet",["kasa-banka"]:"Kasa ve banka",vade:"Vade takvimi",["gelir-gider"]:"Gelir ve gider",raporlar:"Raporlar",ayarlar:"Ayarlar"};
 function route(){ return (location.hash||"#ozet").slice(1) || "ozet"; }
 window.addEventListener("hashchange",()=>{ render(); window.scrollTo(0,0); });
 
@@ -865,7 +885,7 @@ function render(){
   let base=r; if(r.startsWith("cari-")) base="cariler"; if(r.startsWith("hesap-")) base="kasa-banka";
   if(!TITLES[base]) base="ozet";
   document.querySelectorAll("#navList a").forEach(a=>a.setAttribute("aria-current",a.getAttribute("href")==="#"+base?"page":"false"));
-  const V={ozet:vOzet,tahakkuk:vTahakkuk,"hizli-giris":vHizli,cariler:vCariler,islemler:vIslemler,"cek-senet":vCek,"kasa-banka":vKasa,vade:vVade,"gelir-gider":vGelirGider,raporlar:vRapor,ayarlar:vAyar};
+  const V={ozet:vOzet,isler:vIsler,tahakkuk:vTahakkuk,"hizli-giris":vHizli,cariler:vCariler,islemler:vIslemler,"cek-senet":vCek,"kasa-banka":vKasa,vade:vVade,"gelir-gider":vGelirGider,raporlar:vRapor,ayarlar:vAyar};
   let out;
   if(r.startsWith("cari-")) out=vCariDetay(r.slice(5));
   else if(r.startsWith("hesap-")) out=vHesapDetay(r.slice(6));
@@ -884,6 +904,7 @@ function navBadges(){
   const c=$("#cekCnt"); c.hidden=!yakin; c.textContent=yakin;
   const v=vadeOlaylari(true).filter(e=>e.vade && e.vade<TODAY).length;
   const vc=$("#vadeCnt"); vc.hidden=!v; vc.textContent=v; vc.title="Vadesi geçmiş kalem";
+  const ic=$("#isCnt"), ib=isListe().filter(x=>x.durum!=="bitti"&&x.sonTarih&&x.sonTarih<=TODAY).length; ic.hidden=!ib; ic.textContent=ib; ic.title="Termini bugün olan veya geçmiş iş";
   $("#firmName").textContent=S.ayar?.firma?.unvan||"Ön muhasebe";
   const k=S.ayar?.kurlar||{};
   $("#kurInfo").textContent=`Kur: USD ${k.USD||"—"} · EUR ${k.EUR||"—"}`+(S.ayar?.kurTarihi?` (${trDate(S.ayar.kurTarihi)})`:"");
@@ -1231,7 +1252,7 @@ function vAyar(){
   </div></section></div>
   <section class="panel"><header><h2>Veri dosyası</h2></header><div class="pad small" style="max-width:72ch;display:flex;flex-direction:column;gap:8px">
     <p style="margin:0">Bu firma <b class="mono">${esc(S.file.split("/").pop())}</b> dosyasında, <b>${esc(S.file.includes("/")?S.dir?.name+" › "+S.file.split("/")[0]:S.dir?.name||"")}</b> klasöründe saklanıyor. Her değişiklik anında dosyaya yazılır. Her gün ilk değişiklikten önce <b>yedek</b> alt klasörüne bir kopya alınır (son 30 gün saklanır).</p>
-    <p style="margin:0"><b>Google Drive ile ortak kullanım:</b> firma klasörü Drive'da firmanın e-posta adresiyle paylaşılırsa firma kendi bilgisayarında, mali müşavir kendisininkinde aynı veriyi görür. Program başka bilgisayarda yapılan değişiklikleri kendiliğinden yükler. Aynı firmada aynı anda iki bilgisayardan kayıt girmeyin; olursa diğerinin kayıtları korunur, sizin son haliniz yedek klasörüne alınır.</p>
+    <p style="margin:0" ${DRIVE_ACIK?"":"hidden"}><b>Google Drive ile ortak kullanım:</b> firma klasörü Drive'da firmanın e-posta adresiyle paylaşılırsa firma kendi bilgisayarında, mali müşavir kendisininkinde aynı veriyi görür. Program başka bilgisayarda yapılan değişiklikleri kendiliğinden yükler. Aynı firmada aynı anda iki bilgisayardan kayıt girmeyin; olursa diğerinin kayıtları korunur, sizin son haliniz yedek klasörüne alınır.</p>
     <p style="margin:0">Dosya parolayla şifrelidir (AES-256). Kullanıcı adı ve parolası olmayan biri dosyayı kopyalasa da içeriğini okuyamaz.</p>
     <div class="btns"><button class="btn" data-act="mmGonder">Mali müşavire gönderilecek dosyayı indir</button></div>
     <p class="small muted" style="margin:0">İndirilen dosya şifreli kalır. Mali müşavir kendi programında <b>Dosyadan ekle</b> ile alır ve kendi yönetici parolasıyla açar.</p>
@@ -2392,6 +2413,97 @@ function topluDegistirModal(){
 }
 Object.assign(ACT,{ topluSil:()=>topluSilModal(), topluDegistir:()=>topluDegistirModal(), secTemizle:()=>{ S.sec.clear(); document.querySelectorAll("[data-sec],[data-secall]").forEach(x=>{ x.checked=false; x.indeterminate=false; x.closest("tr")?.classList.remove("secili"); }); secCubukGuncelle(); } });
 
+/* ---------- yapılacak işler ---------- */
+const IS_ONC={yuksek:"Yüksek",normal:"Normal",dusuk:"Düşük"}, IS_TEKRAR={"":"Tekrarlamaz",hafta:"Her hafta",ay:"Her ay",ceyrek:"Her 3 ayda bir",yil:"Her yıl"};
+const isler = () => S.data.isler||(S.data.isler={});
+const isListe = () => S.data?.isler?Object.values(S.data.isler):[];
+const kullaniciAd = u => S.data?.kullanicilar?.[u]?.adSoyad||u||"";
+function isIleri(t,tekrar){ if(!t) return t; const [y,m,d]=t.split("-").map(Number), ay={ay:1,ceyrek:3,yil:12}[tekrar];
+  if(tekrar==="hafta") return addDays(t,7);
+  const son=new Date(y,m-1+ay+1,0).getDate(); const n=new Date(y,m-1+ay,Math.min(d,son)); return iso(n); }
+function isGrup(x){ if(!x.sonTarih) return "tarihsiz"; const g=dayDiff(TODAY,x.sonTarih); return g<0?"gecikmis":g===0?"bugun":g<=7?"hafta":"sonra"; }
+function isSatir(x){
+  const ac=S.view.is?.ac===x.id, bitti=x.durum==="bitti", c=x.cariId?S.cariler.get(x.cariId):null, g=x.sonTarih?dayDiff(TODAY,x.sonTarih):null;
+  const tarih=x.sonTarih?`<span class="pill ${bitti?"":g<0?"bad":g===0?"warn":""} mono">${trDate(x.sonTarih)}${!bitti&&g!==null?(g<0?` · ${-g} gün geçti`:g===0?" · bugün":g===1?" · yarın":""):""}</span>`:"";
+  return `<li class="${bitti?"is-bitti":""}${ac?" is-acik":""}"><button type="button" class="is-chk ${bitti?"on":""}" data-act="isBitir" data-id="${x.id}" data-w title="${bitti?"Yeniden aç":"Tamamlandı olarak işaretle"}" aria-label="${bitti?"Yeniden aç":"Tamamlandı"}">${bitti?"✓":""}</button>
+    <div class="is-body" data-act="isAc" data-id="${x.id}" role="button" tabindex="0" aria-expanded="${ac}" title="Notları ${ac?"kapat":"aç"}" style="cursor:pointer"><div><span class="muted small" aria-hidden="true">${ac?"▾":"▸"}</span> <b>${esc(x.baslik)}</b>${x.not?` <span class="small muted" title="Not var">📝</span>`:""}${x.oncelik==="yuksek"&&!bitti?` <span class="pill bad">Öncelikli</span>`:x.oncelik==="dusuk"?` <span class="pill">Düşük</span>`:""}</div>
+      ${x.aciklama?`<div class="small muted is-ack">${esc(x.aciklama)}</div>`:""}
+      <div class="is-meta small muted">${tarih}${c?`<a href="#cari-${c.id}">${esc(c.kod)} · ${esc(c.unvan)}</a>`:""}${x.atanan?`<span>👤 ${esc(kullaniciAd(x.atanan))}</span>`:""}${x.tekrar?`<span>↻ ${IS_TEKRAR[x.tekrar]}</span>`:""}${bitti&&x.bitis?`<span>${trDate(iso(new Date(x.bitis.at)))} tamamlandı${x.bitis.by?" · "+esc(kullaniciAd(x.bitis.by)):""}</span>`:""}</div></div>
+    <button type="button" class="btn sm" data-act="isForm" data-id="${x.id}" data-w>Düzenle</button></li>
+  ${ac?`<li class="is-not-li"><div class="is-not"><label for="isNot" class="small"><b>Notlar</b> <span class="muted" id="isNotSt">${x.notGuncelleme?`son değişiklik ${(d=>trDate(iso(d))+" "+pad(d.getHours())+":"+pad(d.getMinutes()))(new Date(x.notGuncelleme.at))}${x.notGuncelleme.by?" · "+esc(kullaniciAd(x.notGuncelleme.by)):""}`:"yazdıkça kaydedilir"}</span></label>
+    <textarea id="isNot" data-id="${x.id}" rows="5" placeholder="Bu işle ilgili notlarınızı yazın: kiminle görüşüldü, ne eksik, nerede kaldı…" ${S.canWrite?"":"readonly"}>${esc(x.not||"")}</textarea></div></li>`:""}`;
+}
+function vIsler(){
+  const f=S.view.is||(S.view.is={durum:"acik",q:"",kim:""});
+  const q=f.q.trim().toLocaleLowerCase("tr");
+  const L=isListe().filter(x=>(f.durum==="tumu"||(f.durum==="bitti")===(x.durum==="bitti"))
+    &&(!f.kim||(f.kim==="-"?!x.atanan:x.atanan===f.kim))
+    &&(!q||[x.baslik,x.aciklama,S.cariler.get(x.cariId)?.unvan,S.cariler.get(x.cariId)?.kod].some(v=>(v||"").toLocaleLowerCase("tr").includes(q))));
+  const acik=isListe().filter(x=>x.durum!=="bitti"), gec=acik.filter(x=>x.sonTarih&&x.sonTarih<TODAY).length, bug=acik.filter(x=>x.sonTarih===TODAY).length;
+  const ONC={yuksek:0,normal:1,dusuk:2};
+  let govde;
+  if(!L.length) govde=`<div class="pad muted">${isListe().length?"Bu filtreye uyan iş yok.":"Henüz iş eklenmedi. Yukarıdaki kutuya yazıp Enter'a basarak ilk işinizi ekleyin."}</div>`;
+  else if(f.durum==="bitti") govde=`<ul class="is-grp">${L.sort((a,b)=>(b.bitis?.at||"").localeCompare(a.bitis?.at||"")).map(isSatir).join("")}</ul>`;
+  else { const G=[["gecikmis","Termini geçenler"],["bugun","Bugün"],["hafta","Önümüzdeki 7 gün"],["sonra","Daha sonra"],["tarihsiz","Tarihsiz"]];
+    const sir=(a,b)=>(a.sonTarih||"9").localeCompare(b.sonTarih||"9")||ONC[a.oncelik||"normal"]-ONC[b.oncelik||"normal"]||(a.at||"").localeCompare(b.at||"");
+    const ac=L.filter(x=>x.durum!=="bitti"), bt=L.filter(x=>x.durum==="bitti");
+    govde=G.map(([k,ad])=>{ const g=ac.filter(x=>isGrup(x)===k).sort(sir); return g.length?`<div class="is-grp-h">${ad} · ${g.length}</div><ul class="is-grp">${g.map(isSatir).join("")}</ul>`:""; }).join("")
+      +(bt.length?`<div class="is-grp-h">Tamamlananlar · ${bt.length}</div><ul class="is-grp">${bt.sort((a,b)=>(b.bitis?.at||"").localeCompare(a.bitis?.at||"")).map(isSatir).join("")}</ul>`:""); }
+  const kul=Object.keys(S.data.kullanicilar||{});
+  const html=`<section class="panel">
+    <form class="is-hizli" id="isHizli" data-w><input type="text" id="isH_b" placeholder="Yeni iş yazın, Enter'a basın (örn. ABC Ltd. KDV beyannamesi)" autocomplete="off" aria-label="Yeni iş">
+      <input type="date" id="isH_t" aria-label="Termin tarihi" title="Termin tarihi (isteğe bağlı)"><button class="btn pri" type="submit">Ekle</button><button class="btn" type="button" data-act="isForm">Ayrıntılı…</button></form>
+    <div class="filters" style="padding:0 18px 12px">
+      <div class="seg" role="group" aria-label="Durum">${[["acik","Açık"],["bitti","Tamamlanan"],["tumu","Tümü"]].map(([k,v])=>`<button type="button" aria-pressed="${f.durum===k}" data-act="isDurum" data-k="${k}">${v}</button>`).join("")}</div>
+      <input type="search" id="isQ" placeholder="Ara: iş, açıklama, cari" value="${esc(f.q)}" style="max-width:260px">
+      ${kul.length>1?`<select id="isKim" aria-label="Kişi"><option value="">Herkes</option>${kul.map(u=>`<option value="${esc(u)}" ${f.kim===u?"selected":""}>${esc(kullaniciAd(u))}</option>`).join("")}<option value="-" ${f.kim==="-"?"selected":""}>Atanmamış</option></select>`:""}
+    </div>
+    ${govde}</section>`;
+  return {title:`Yapılacak işler<span class="sub">${acik.length} açık iş${gec?` · <span style="color:var(--borc)">${gec} termini geçmiş</span>`:""}${bug?` · ${bug} bugün`:""}</span>`,
+    btns:`<button class="btn pri" data-act="isForm" data-w>+ Yeni iş</button>`, html,
+    after(){
+      $("#isHizli")?.addEventListener("submit",e=>{ e.preventDefault(); const b=$("#isH_b").value.trim(); if(!b) return $("#isH_b").focus();
+        const id=uid("is"); isler()[id]={id,baslik:b,sonTarih:$("#isH_t").value||"",oncelik:"normal",durum:"acik",...stamp()}; changed(); toast("İş eklendi"); setTimeout(()=>$("#isH_b")?.focus(),0); });
+      let t; $("#isQ").addEventListener("input",e=>{ clearTimeout(t); t=setTimeout(()=>{ f.q=e.target.value; render(); const el=$("#isQ"); el.focus(); el.setSelectionRange(el.value.length,el.value.length); },250); });
+      $("#isKim")?.addEventListener("change",e=>{ f.kim=e.target.value; render(); });
+      const nt=$("#isNot"); if(nt) nt.addEventListener("input",()=>{ const x=isler()[nt.dataset.id]; if(!x||!S.canWrite) return; x.not=nt.value; x.notGuncelleme=stamp(); scheduleSave(); const st=$("#isNotSt"); if(st) st.textContent="kaydediliyor…"; clearTimeout(nt.t); nt.t=setTimeout(()=>{ if($("#isNotSt")) $("#isNotSt").textContent="kaydedildi"; },900); });
+      document.querySelectorAll(".is-body[data-act]").forEach(b=>b.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); b.click(); } }));
+    }};
+}
+function isForm(id){
+  const x=id?isler()[id]:null, kul=Object.keys(S.data.kullanicilar||{}), c=x?.cariId?S.cariler.get(x.cariId):null;
+  modal(x?"İşi düzenle":"Yeni iş",`<form class="form" id="isF">
+    <div class="f w"><label for="is_b">İş</label><input type="text" id="is_b" name="baslik" value="${esc(x?.baslik||"")}" placeholder="Örn. KDV beyannamesi" required></div>
+    <div class="f w"><label for="is_a">Açıklama</label><textarea id="is_a" name="aciklama" rows="3">${esc(x?.aciklama||"")}</textarea></div>
+    <div class="f"><label for="is_t">Termin tarihi</label><input type="date" id="is_t" name="sonTarih" value="${esc(x?.sonTarih||"")}"></div>
+    <div class="f"><label for="is_o">Öncelik</label><select id="is_o" name="oncelik">${Object.entries(IS_ONC).map(([k,v])=>`<option value="${k}" ${(x?.oncelik||"normal")===k?"selected":""}>${v}</option>`).join("")}</select></div>
+    <div class="f"><label for="is_r">Tekrar</label><select id="is_r" name="tekrar">${Object.entries(IS_TEKRAR).map(([k,v])=>`<option value="${k}" ${(x?.tekrar||"")===k?"selected":""}>${v}</option>`).join("")}</select></div>
+    ${kul.length>1?`<div class="f"><label for="is_k">Sorumlu</label><select id="is_k" name="atanan"><option value="">—</option>${kul.map(u=>`<option value="${esc(u)}" ${x?.atanan===u?"selected":""}>${esc(kullaniciAd(u))}</option>`).join("")}</select></div>`:""}
+    ${S.cariler.size?`<div class="f w"><label for="is_c">İlgili cari (isteğe bağlı)</label><input type="text" id="is_c" list="isCariList" value="${c?esc(c.kod+" · "+c.unvan):""}" placeholder="Kod veya ünvan yazın" autocomplete="off"><datalist id="isCariList">${sortedCariler().map(c=>`<option value="${esc(c.kod)} · ${esc(c.unvan)}">`).join("")}</datalist></div>`:""}
+    <p class="small muted f w" style="margin:0">Tekrarlayan bir iş tamamlandığında bir sonraki dönemin işi aynı bilgilerle kendiliğinden açılır.</p>
+    <p class="err" id="mErr" hidden></p></form>`,
+    `${x?`<button class="btn danger" data-act="isSil" data-id="${id}" data-w>Sil</button>`:"<span></span>"}<div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="isF" data-w>Kaydet</button></div>`);
+  $("#isF").addEventListener("submit",e=>{ e.preventDefault(); const fd=Object.fromEntries(new FormData(e.target));
+    if(!fd.baslik.trim()) return showErr("İşi yazın.");
+    let cariId=""; const cv=($("#is_c")?.value||"").trim();
+    if(cv){ const k=cv.split(" · ")[0].trim(), bul=sortedCariler().find(c=>c.kod===k)||sortedCariler().find(c=>(c.kod+" · "+c.unvan)===cv||c.unvan.toLocaleLowerCase("tr")===cv.toLocaleLowerCase("tr")); if(!bul) return showErr("Cari bulunamadı; listeden seçin ya da boş bırakın."); cariId=bul.id; }
+    if(fd.tekrar&&!fd.sonTarih) return showErr("Tekrarlayan iş için termin tarihi girin.");
+    const nid=id||uid("is");
+    isler()[nid]={...(x||{durum:"acik",...stamp()}),id:nid,baslik:fd.baslik.trim(),aciklama:fd.aciklama.trim(),sonTarih:fd.sonTarih||"",oncelik:fd.oncelik,tekrar:fd.tekrar||"",atanan:fd.atanan||"",cariId,...(x?{duzenleme:stamp()}:{})};
+    closeModal(); changed(); toast(x?"İş güncellendi":"İş eklendi"); });
+}
+Object.assign(ACT,{
+  isForm:el=>isForm(el.dataset.id),
+  isDurum:el=>{ S.view.is.durum=el.dataset.k; render(); },
+  isAc:el=>{ const f=S.view.is; f.ac=f.ac===el.dataset.id?null:el.dataset.id; render(); if(f.ac) setTimeout(()=>{ const t=$("#isNot"); if(t&&S.canWrite){ t.focus(); t.setSelectionRange(t.value.length,t.value.length); } },0); },
+  isBitir:el=>{ const x=isler()[el.dataset.id]; if(!x) return;
+    if(x.durum==="bitti"){ x.durum="acik"; delete x.bitis; if(x.sonrakiId&&isler()[x.sonrakiId]&&isler()[x.sonrakiId].durum!=="bitti"){ delete isler()[x.sonrakiId]; } delete x.sonrakiId; changed(); return toast("İş yeniden açıldı"); }
+    x.durum="bitti"; x.bitis=stamp(); let ek="";
+    if(x.tekrar&&x.sonTarih){ const nid=uid("is"), t=isIleri(x.sonTarih,x.tekrar); isler()[nid]={...x,id:nid,durum:"acik",sonTarih:t,...stamp()}; for(const k of ["bitis","sonrakiId","duzenleme","not","notGuncelleme"]) delete isler()[nid][k]; x.sonrakiId=nid; ek=`; sonraki: ${trDate(t)}`; }
+    changed(); toast("Tamamlandı"+ek); },
+  isSil:el=>{ if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent="Silinsin mi? Onayla"; return; } delete isler()[el.dataset.id]; closeModal(); changed(); toast("İş silindi"); },
+});
+
 /* ---------- aylık ücret tahakkuku (firmaya özel modül) ---------- */
 const AY_TAM=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 const ayTam = ym => AY_TAM[+ym.slice(5,7)-1]+" "+ym.slice(0,4);
@@ -2845,7 +2957,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.6.2-önizleme";
+const SURUM="1.7.0-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
