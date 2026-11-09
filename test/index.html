@@ -557,6 +557,7 @@ async function startScreen(mesaj){
     <div class="btns"><label class="btn pri" for="yf_imp" style="cursor:pointer">Dosyadan firma ekle</label><button class="btn" data-act="yeniFirmaKur">Yeni firma oluştur</button><button class="btn" data-act="ornekFirma">Örnek verili deneme firması</button></div>
     <input type="file" id="yf_imp" accept=".json" hidden></div>`)}`); return impBagla(); }
   startShow(`${mesaj?`<div class="notice">${esc(mesaj)}</div>`:""}
+  <div class="small muted" style="text-align:center">Veri klasörü: <b>${esc(S.dir.name)}</b> · ${dosyalar.length} firma dosyası bulundu</div>
   <div class="panel" style="max-width:440px;width:100%"><header><h2>Giriş</h2></header>
   <form class="form" id="gForm" style="grid-template-columns:minmax(0,1fr)" autocomplete="off">
     <div class="f"><label for="g_k">Firma kodu</label><input type="text" id="g_k" autocapitalize="characters" spellcheck="false" placeholder="Mali müşavirinizin verdiği kod"><span class="hint">Yöneticiler boş bırakarak tüm firmalarını görebilir.</span></div>
@@ -594,7 +595,7 @@ async function startScreen(mesaj){
     if(!acilan.length && kodGerek && !kod){ return hata("Firma kodunu girin."); }
     if(!acilan.length){ hataSay++; if(hataSay>=5) bekle=Date.now()+30000*(hataSay-4); $("#g_p").value=""; $("#g_p").focus(); return hata("Kullanıcı adı veya parola hatalı."); }
     hataSay=0; S.firmalar=acilan; try{ if(kod) localStorage.setItem("skypro_sonkod",$("#g_k").value.trim()); }catch{}
-    if(acilan.length===1) return girisYap(acilan[0]);
+    if(acilan.length===1 && !(acilan[0].data.kullanicilar[acilan[0].u]?.rol==="yonetici" && !acilan[0].dosya.includes("/"))) return girisYap(acilan[0]);
     firmaSecim();
   });
 }
@@ -1716,7 +1717,7 @@ document.addEventListener("click",e=>{
 
 /* ---------- başlatma ---------- */
 Object.assign(ACT,{
-  async klasorSec(){ try{ const d=await window.showDirectoryPicker({id:"skypro",mode:"readwrite"}); S.dir=d; await kvSet("dir",d); startScreen(); }catch(e){ if(e?.name!=="AbortError") toast("Klasör seçilemedi."); } },
+  async klasorSec(){ try{ const d=await window.showDirectoryPicker({id:"skypro",mode:"readwrite"}); S.dir=d; await kvSet("dir",d); await startScreen(`Veri klasörü "${d.name}" seçildi. Kullanıcı adı ve parolanızla girin.`); }catch(e){ if(e?.name!=="AbortError") toast("Klasör seçilemedi: "+(e?.message||e?.name||"bilinmeyen hata")); } },
   async klasoreAyir(el){
     const L=(S.firmalar||[]).filter(x=>!x.dosya.includes("/")&&x.data.kullanicilar?.[x.u]?.rol==="yonetici"); if(!L.length) return;
     if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent=`${L.length} firma kendi klasörüne taşınsın mı? Onayla`; return; }
@@ -2826,7 +2827,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.6.0-önizleme";
+const SURUM="1.6.1-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
