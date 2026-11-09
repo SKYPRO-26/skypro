@@ -286,6 +286,11 @@ const KANAL_ALL = {...KANAL_T,...KANAL_O};
 const CDURUM = {portfoy:"Portföyde",tahsilde:"Bankada tahsilde",tahsil:"Tahsil edildi",ciro:"Ciro edildi",karsiliksiz:"Karşılıksız",iade:"İade edildi",odenecek:"Ödenecek",odendi:"Ödendi"};
 const CDURUM_CLS = {portfoy:"acc",tahsilde:"warn",tahsil:"ok",ciro:"",karsiliksiz:"bad",iade:"",odenecek:"warn",odendi:"ok"};
 const CTIP = {musteri:"Müşteri",tedarikci:"Tedarikçi",ikisi:"Müşteri + tedarikçi",personel:"Personel",diger:"Diğer"};
+const KOD_ON = {musteri:"M",tedarikci:"S",ikisi:"M",personel:"P",diger:"D"};
+function kodSayaci(){ const say={}; for(const c of S.cariler.values()){ const x=String(c.kod||"").toUpperCase().match(/^([A-Z])(\d+)$/); if(x) say[x[1]]=Math.max(say[x[1]]||0,+x[2]); }
+  return tip=>{ const on=KOD_ON[tip]||"C"; say[on]=(say[on]||0)+1; return on+String(say[on]).padStart(3,"0"); }; }
+const sonrakiKod = tip => kodSayaci()(tip);
+const eskiKodlu = () => sortedCariler().filter(c=>/^C\d+$/i.test(c.kod||""));
 const HTIP = {kasa:"Kasa",banka:"Banka",pos:"POS / kredi kartı"};
 const GIDER_TUR = ["Ticari mal / hammadde","Nakliye ve lojistik","Kira","Maaş ve ücret","Vergi / SGK","Elektrik, su, doğalgaz","İletişim","Akaryakıt","Araç giderleri","Bakım ve onarım","Kırtasiye","Muhasebe ücreti","Danışmanlık ve hizmet alımı","Reklam ve pazarlama","Sigorta","Yemek ve temsil","Banka masrafı","Diğer gider"];
 const GELIR_TUR = ["Mal satışı","Hizmet geliri","Kira geliri","Faiz geliri","Kur farkı geliri","Diğer gelir"];
@@ -874,7 +879,9 @@ function vCariler(){
   const body=rows.map(c=>{ const d=S.D.cari.get(c.id); const v=d.bak*kur(c.doviz); if(v>0)tB+=v; else tA-=v;
     const lim=num(c.limit); const asim=lim>0&&d.risk>lim;
     return `<tr class="click" tabindex="0" data-go="#cari-${c.id}"><td class="mono small">${esc(c.kod)}</td><td>${esc(c.unvan)}${exTag(c)}${asim?` <span class="pill bad">limit aşıldı</span>`:""}<div class="small muted">${CTIP[c.tip]||""}${c.doviz!=="TRY"?" · "+c.doviz:""}</div></td><td class="r">${bal(d.bak,c.doviz)}</td><td class="r">${c.doviz!=="TRY"?`<span class="amt muted">${money(d.bak*kur(c.doviz))}</span>`:""}</td><td class="mono small muted">${trDate(d.son)}</td></tr>`;}).join("");
-  const html=`<section class="panel"><header><div class="filters">
+  const eski=S.canEdit?eskiKodlu():[];
+  const html=`${eski.length?`<div class="notice" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${eski.length} carinin kodu eski <b>C</b> düzeninde (${esc(eski[0].kod)}…). Müşterileri <b>M</b>, satıcıları <b>S</b> ile başlayacak şekilde yeniden kodlayabilirsiniz.</span><button class="btn sm" data-act="kodDuzenle" data-w>Kodları yeniden düzenle</button></div>`:""}
+  <section class="panel"><header><div class="filters">
     <label>Ara<input type="search" id="cfq" value="${esc(f.q)}" placeholder="Ünvan, kod, VKN"></label>
     <label>Tip<select id="cftip"><option value="">Tümü</option>${Object.entries(CTIP).map(([k,v])=>`<option value="${k}" ${f.tip===k?"selected":""}>${v}</option>`).join("")}</select></label>
     <label style="flex-direction:row;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="cfbak" ${f.bak?"checked":""}> Sadece bakiyeli</label>
@@ -882,8 +889,9 @@ function vCariler(){
   ${rows.length?`<div class="tw"><table><thead><tr><th>Kod</th><th>Ünvan</th><th class="r">Bakiye</th><th class="r">TL karşılığı</th><th>Son hareket</th></tr></thead><tbody>${body}</tbody>
   <tfoot><tr><td></td><td>${rows.length} cari</td><td class="r" colspan="2"><span class="amt b">${money(tB)}<i>B</i></span> &nbsp; <span class="amt a">${money(tA)}<i>A</i></span></td><td></td></tr></tfoot></table></div>`
   :`<div class="empty">${S.cariler.size?"Filtreye uyan cari yok.":"Henüz cari kartı yok. Sağ üstten <b>Yeni cari</b> ile başlayın."}</div>`}</section>
-  <p class="small muted">B: cari bize borçlu (alacağımız) · A: cari alacaklı (borcumuz). Dövizli carilerde TL karşılığı Ayarlar'daki güncel kurla hesaplanır.</p>`;
-  return {title:"Cari hesaplar",btns:`<button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
+  <p class="small muted">B: cari bize borçlu (alacağımız) · A: cari alacaklı (borcumuz). Dövizli carilerde TL karşılığı Ayarlar'daki güncel kurla hesaplanır.</p>
+  ${cariAktarimPanel()}`;
+  return {title:"Cari hesaplar",btns:`<button class="btn" data-act="cariAktar" data-w>Excel'den cari al</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
     after(){
       $("#cfq").addEventListener("input",e=>{f.q=e.target.value; const p=e.target.selectionStart; render(); const i=$("#cfq"); i.focus(); i.setSelectionRange(p,p);});
       $("#cftip").addEventListener("change",e=>{f.tip=e.target.value;render();});
@@ -1184,10 +1192,10 @@ function showErr(t){ const el=$("#mErr"); if(el){ el.textContent=t; el.hidden=fa
 /* ---------- CARİ FORM ---------- */
 function cariForm(id){
   const c=id?S.cariler.get(id):null;
-  const kod=c?.kod||("C"+String(S.cariler.size+1).padStart(3,"0"));
+  const kod=c?.kod||sonrakiKod("musteri");
   const hasH=c&&S.D.cari.get(id).list.length>0;
   modal(c?"Cariyi düzenle":"Yeni cari kartı",`<form class="form" id="cForm">
-    <div class="f"><label for="c_kod">Cari kodu</label><input type="text" id="c_kod" name="kod" value="${esc(kod)}" required></div>
+    <div class="f"><label for="c_kod">Cari kodu</label><input type="text" id="c_kod" name="kod" value="${esc(kod)}" required>${c?"":`<span class="hint">Müşteri M, satıcı S ile başlar; tip seçince kendiliğinden gelir.</span>`}</div>
     <div class="f"><label for="c_tip">Tip</label><select id="c_tip" name="tip">${Object.entries(CTIP).map(([k,v])=>`<option value="${k}" ${(c?.tip||"musteri")===k?"selected":""}>${v}</option>`).join("")}</select></div>
     <div class="f w"><label for="c_unvan">Ünvan / ad soyad</label><input type="text" id="c_unvan" name="unvan" value="${esc(c?.unvan||"")}" required></div>
     <div class="f"><label for="c_vkn">VKN / TCKN</label><input type="text" id="c_vkn" name="vkn" value="${esc(c?.vkn||"")}" inputmode="numeric"></div>
@@ -1206,9 +1214,12 @@ function cariForm(id){
     <div class="f"><label for="c_abt">Açılış tarihi</label><input type="date" id="c_abt" name="acilisTarih" value="${TODAY.slice(0,4)}-01-01"></div>`:""}
     <p class="err" id="mErr" hidden></p></form>`,
     `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="cForm">Kaydet</button></div>`);
+  if(!c){ const kd=$("#c_kod"); kd.addEventListener("input",()=>kd.dataset.el="1"); $("#c_tip").addEventListener("change",e=>{ if(!kd.dataset.el) kd.value=sonrakiKod(e.target.value); }); }
   $("#cForm").addEventListener("submit",async e=>{
     e.preventDefault(); const fd=Object.fromEntries(new FormData(e.target));
     if(!fd.unvan.trim()) return showErr("Ünvan boş olamaz.");
+    if(!fd.kod.trim()) return showErr("Cari kodu boş olamaz.");
+    if([...S.cariler.values()].some(x=>x.id!==id&&String(x.kod||"").trim().toLocaleUpperCase("tr")===fd.kod.trim().toLocaleUpperCase("tr"))) return showErr(`${fd.kod.trim()} kodu başka bir caride kullanılıyor.`);
     const nid=id||uid("cr");
     const lim=num(fd.limit);
     const rec={...(c||{}),id:nid,kod:fd.kod.trim(),tip:fd.tip,unvan:fd.unvan.trim(),vkn:fd.vkn.trim(),vd:fd.vd.trim(),doviz:hasH?c.doviz:fd.doviz,limit:lim>0?lim:null,yetkili:fd.yetkili,tel:fd.tel,eposta:fd.eposta,iban:fd.iban,adres:fd.adres,not:fd.not,varsayilanTur:(fd.varsayilanTur||"").trim().replace(/\s+/g," "),...(c?{}:stamp())};
@@ -1660,10 +1671,10 @@ function ornekVeri(){
   d.ayar.kurlar={USD:42.8,EUR:49.6,GBP:56.4};
   const at="2026-11-06T09:00:00Z", o={ornek:true,at,by:null};
   const C=(id,kod,tip,unvan,doviz,limit,adres)=>d.cariler[id]={id,kod,tip,unvan,doviz,limit,adres,vkn:"",vd:"",yetkili:"",tel:"",eposta:"",iban:"",not:"",...o};
-  C("cr-ornek-1","C001","musteri","Akdeniz Gıda Ltd. Şti.","TRY",250000,"Mersin");
-  C("cr-ornek-2","C002","tedarikci","Yıldız Ambalaj A.Ş.","TRY",null,"İstanbul");
-  C("cr-ornek-3","C003","musteri","Nordic Trade GmbH","EUR",null,"Hamburg");
-  C("cr-ornek-4","C004","ikisi","Ege Lojistik","TRY",null,"İzmir");
+  C("cr-ornek-1","M001","musteri","Akdeniz Gıda Ltd. Şti.","TRY",250000,"Mersin");
+  C("cr-ornek-2","S001","tedarikci","Yıldız Ambalaj A.Ş.","TRY",null,"İstanbul");
+  C("cr-ornek-3","M002","musteri","Nordic Trade GmbH","EUR",null,"Hamburg");
+  C("cr-ornek-4","M003","ikisi","Ege Lojistik","TRY",null,"İzmir");
   const H=(id,tip,doviz,ad,banka,acilis)=>d.hesaplar[id]={id,tip,doviz,ad,banka,sube:"",iban:"",acilis,...o};
   H("hs-ornek-kasa","kasa","TRY","Merkez kasa","",15000);
   H("hs-ornek-ziraat","banka","TRY","Ziraat vadesiz TL","Ziraat Bankası",180000);
@@ -1978,6 +1989,164 @@ async function bankaAktarKaydet(){
   S.data.bankaAktarim=S.data.bankaAktarim.slice(0,50);
   closeModal(); changed(); toast(`${s.length} banka hareketi aktarıldı`);
 }
+/* ---------- Excel'den cari aktarımı ---------- */
+const CA = {};
+const CA_DESEN={firma:/FIRMA|UNVAN|CARI|MUSTERI|ADI SOYADI|ISIM/, tarih:/TARIH/, aciklama:/ACIKLAMA|DETAY/, borc:/BORC/, alacak:/ALACAK/, vkn:/VKN|TCKN|VERGI NO|KIMLIK/, belge:/BELGE|EVRAK|FATURA NO|FIS NO/, tur:/\bTUR|\bTIP|DEVIR|TAHSIL|ISLEM|HAREKET/};
+function caBaslikBul(rows){ let en=0,sk=0; rows.slice(0,30).forEach((r,i)=>{ const t=r.map(x=>bkNorm(x)); let s=0; for(const k of ["firma","tarih","borc","alacak","aciklama"]) if(t.some(x=>CA_DESEN[k].test(x))) s++; if(s>sk){ sk=s; en=i; } }); return sk>=2?en:0; }
+function caKolon(bas){ const h=bas.map(x=>bkNorm(x)), k={}, used=new Set();
+  for(const ad of ["tarih","borc","alacak","aciklama","vkn","belge","firma","tur"]){ k[ad]=-1; for(let i=0;i<h.length;i++){ if(used.has(i)) continue; if(CA_DESEN[ad].test(h[i])){ k[ad]=i; used.add(i); break; } } }
+  return k; }
+function caVarsayilan(v){ if(/DEVIR|ACILIS/.test(v)) return "devir"; if(/FATURA|SATIS|ALIS|\bFT\b|IADE/.test(v)) return "fatura"; if(/TAHSIL|ODEME|HAVALE|EFT|NAKIT|KASA|BANKA|CEK|SENET|POS/.test(v)) return "para"; return "dekont"; }
+function caDeger(row){ const k=CA.kol; if(k.tur>-1) return bkNorm(row[k.tur])||"(BOS)"; return /DEVIR/.test(bkNorm(k.aciklama>-1?row[k.aciklama]:""))?"DEVIR":"(TURSUZ)"; }
+function caPlanla(){
+  const k=CA.kol, P={firmalar:new Map(),kayit:[],bos:0,kayitli:0,kilitli:0,sifir:0,tarihsiz:0};
+  const mevcutAd=new Map(), mevcutVkn=new Map();
+  for(const c of S.cariler.values()){ mevcutAd.set(bkNorm(c.unvan),c); const v=String(c.vkn||"").replace(/\D/g,""); if(v.length>=10) mevcutVkn.set(v,c); }
+  const aktarilmis=new Set(S.hareketler.filter(h=>h.caSatir).map(h=>h.caSatir));
+  CA.say={};
+  for(const row of CA.rows.slice(CA.baslik+1)){
+    const ad=String(row[k.firma]??"").trim().replace(/\s+/g," "), n=bkNorm(ad);
+    if(!n){ if(row.some(x=>String(x).trim())) P.bos++; continue; }
+    const vkn=k.vkn>-1?String(row[k.vkn]??"").replace(/\D/g,""):"";
+    let F=P.firmalar.get(n);
+    if(!F){ const c=(vkn.length>=10&&mevcutVkn.get(vkn))||mevcutAd.get(n); F={ad,n,vkn,cari:c||null,borc:0,alacak:0,adet:0}; P.firmalar.set(n,F); }
+    const v=caDeger(row);
+    if(!(v in CA.esle)){ CA.esle[v]=caVarsayilan(v); CA.etiket[v]=k.tur>-1?(String(row[k.tur]??"").trim()||"(boş)"):(v==="DEVIR"?"Açıklamasında “devir” geçen satırlar":"Diğer satırlar"); }
+    CA.say[v]=(CA.say[v]||0)+1;
+    const tur=CA.esle[v]; if(tur==="atla") continue;
+    const b=k.borc>-1?Math.abs(bkTutar(row[k.borc]))||0:0, a=k.alacak>-1?Math.abs(bkTutar(row[k.alacak]))||0:0;
+    if(!b&&!a){ P.sifir++; continue; }
+    let tarih=k.tarih>-1?bkTarih(row[k.tarih]):null; if(!tarih){ P.tarihsiz++; tarih=CA.varsTarih; }
+    const ack=k.aciklama>-1?String(row[k.aciklama]??"").trim():"";
+    const anahtar=`${n}|${tarih}|${r2(b)}|${r2(a)}|${bkNorm(ack).slice(0,40)}`;
+    if(aktarilmis.has(anahtar)){ P.kayitli++; continue; }
+    if(kilitli(tarih)){ P.kilitli++; continue; }
+    F.borc+=b; F.alacak+=a; F.adet++;
+    P.kayit.push({F,tarih,b:r2(b),a:r2(a),ack,belge:k.belge>-1?String(row[k.belge]??"").trim():"",tur,v,anahtar});
+  }
+  CA.plan=P;
+}
+function caHareket(r,cariId,doviz,aid,st){
+  const out=[], hs=CA.hesap[r.v]?S.hesaplar.get(CA.hesap[r.v]):null, kr=kur(doviz)||1;
+  const yap=(tutar,yon)=>{ const x={id:uid("hr"),tarih:r.tarih,cariId,tutar,doviz,kur:kr,belgeNo:r.belge,aciklama:r.ack.slice(0,160),caAktarim:aid,caSatir:r.anahtar,...st};
+    if(r.tur==="devir"){ x.tur=yon==="b"?"borc_dekont":"alacak_dekont"; if(!x.aciklama) x.aciklama="Devir bakiye"; }
+    else if(r.tur==="fatura") x.tur=yon==="b"?"satis":"alis";
+    else if(r.tur==="para"&&hs&&doviz==="TRY"){ x.tur=yon==="a"?"tahsilat":"odeme"; x.kanal=hs.tip==="kasa"?"nakit":"banka"; x.hesapId=hs.id; }
+    else x.tur=yon==="b"?"borc_dekont":"alacak_dekont";
+    out.push(x); };
+  if(r.b) yap(r.b,"b"); if(r.a) yap(r.a,"a");
+  return out;
+}
+function cariAktarAc(){
+  Object.keys(CA).forEach(k=>delete CA[k]);
+  Object.assign(CA,{tip:"musteri",bosKart:true,varsTarih:TODAY.slice(0,4)+"-01-01",esle:{},etiket:{},hesap:{},say:{}});
+  modal("Excel'den cari hesapları al",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px" id="caKok">
+    <div class="filters"><label>Excel dosyası<input type="file" id="ca_f" accept=".xlsx,.xls,.csv,.txt,.htm,.html"></label></div>
+    <p class="small muted" style="margin:0">Firma adı, tarih, açıklama, borç ve alacak sütunları olan listenizi seçin. Aynı firmanın satırları tek cari kartında toplanır; programda zaten olan firmalar ünvan veya VKN'den tanınır.</p>
+    <div id="caEsle"></div><div id="caOn"></div></div>`,
+    `<span class="small muted" id="caOzet"></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" id="caGo" disabled>İçe aktar</button></div>`);
+  $("#overlay .sheet").style.maxWidth="1100px";
+  $("#ca_f").addEventListener("change",async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    $("#caEsle").innerHTML=`<div class="muted">Dosya okunuyor…</div>`; $("#caOn").innerHTML="";
+    try{ CA.rows=(await ekstreDosyaOku(f)).filter(r=>r.some(x=>String(x).trim()!=="")); CA.dosya=f.name; }
+    catch(x){ $("#caEsle").innerHTML=`<div class="notice bad">${x.message==="eskixls"?"Bu dosya eski Excel biçiminde (.xls). Dosyayı Excel'de açıp <b>Farklı Kaydet → Excel Çalışma Kitabı (.xlsx)</b> olarak kaydedin ve onu seçin.":"Dosya okunamadı. Excel (.xlsx) veya CSV biçiminde kaydedip tekrar deneyin."}</div>`; return; }
+    if(!CA.rows.length){ $("#caEsle").innerHTML=`<div class="notice bad">Dosyada satır bulunamadı.</div>`; return; }
+    CA.baslik=caBaslikBul(CA.rows); CA.kol=caKolon(CA.rows[CA.baslik]||[]); CA.esle={}; caCiz();
+  });
+  $("#caGo").addEventListener("click",caKaydet);
+  $("#caKok").addEventListener("change",e=>{ const t=e.target, d=t.dataset;
+    if(d.k){ if(d.k==="baslik"){ CA.baslik=Math.max(0,(+t.value||1)-1); CA.kol=caKolon(CA.rows[CA.baslik]||[]); } else CA.kol[d.k]=+t.value; if(d.k==="baslik"||d.k==="tur"||d.k==="aciklama"){ CA.esle={}; CA.hesap={}; } caCiz(); return; }
+    if(d.esle!=null){ CA.esle[d.esle]=t.value; caCiz(); return; }
+    if(d.hesap!=null){ CA.hesap[d.hesap]=t.value; caCiz(); return; }
+    if(t.id==="ca_tip") CA.tip=t.value;
+    if(t.id==="ca_bos"){ CA.bosKart=t.checked; caCiz(); }
+    if(t.id==="ca_tar"&&t.value){ CA.varsTarih=t.value; caCiz(); }
+  });
+}
+function caCiz(){
+  const bas=CA.rows[CA.baslik]||[], n=Math.max(...CA.rows.slice(0,60).map(r=>r.length)), k=CA.kol;
+  const opt=sel=>`<option value="-1" ${sel<0?"selected":""}>— yok —</option>${Array.from({length:n},(_,i)=>`<option value="${i}" ${sel===i?"selected":""}>${esc(String(bas[i]??"").slice(0,28)||colL(i)+" sütunu")}</option>`).join("")}`;
+  $("#caEsle").innerHTML=`<div class="panel"><header><h2>Sütunlar</h2><span class="small muted">${esc(CA.dosya)} · otomatik tanındı; yanlışsa düzeltin</span></header><div class="pad filters">
+    <label>Başlık satırı<input type="text" inputmode="numeric" data-k="baslik" value="${CA.baslik+1}" style="width:70px"></label>
+    <label>Firma adı<select data-k="firma">${opt(k.firma)}</select></label>
+    <label>İşlem türü<select data-k="tur">${opt(k.tur)}</select></label>
+    <label>Tarih<select data-k="tarih">${opt(k.tarih)}</select></label>
+    <label>Açıklama<select data-k="aciklama">${opt(k.aciklama)}</select></label>
+    <label>Borç<select data-k="borc">${opt(k.borc)}</select></label>
+    <label>Alacak<select data-k="alacak">${opt(k.alacak)}</select></label>
+    <label>VKN / TCKN<select data-k="vkn">${opt(k.vkn)}</select></label>
+    <label>Belge no<select data-k="belge">${opt(k.belge)}</select></label>
+  </div></div>`;
+  if(k.firma<0||(k.borc<0&&k.alacak<0)){ $("#caOn").innerHTML=`<div class="notice warn">Firma adı ile borç veya alacak sütununu seçin.</div>`; $("#caGo").disabled=true; $("#caOzet").textContent=""; return; }
+  caPlanla(); const P=CA.plan;
+  const hl=sortedHesaplar().filter(h=>h.doviz==="TRY");
+  const TURLER=[["devir","Devir / açılış bakiyesi"],["fatura","Fatura (borç: satış, alacak: alış)"],["para","Tahsilat / ödeme (alacak: tahsilat, borç: ödeme)"],["dekont","Borç / alacak dekontu"],["atla","Aktarma"]];
+  const turSec=v=>`<select data-esle="${esc(v)}">${TURLER.map(([a,b])=>`<option value="${a}" ${CA.esle[v]===a?"selected":""}>${b}</option>`).join("")}</select>`;
+  const hesSec=v=>CA.esle[v]==="para"?`<select data-hesap="${esc(v)}"><option value="">Yalnızca cariye işle (kasa/banka değişmez)</option>${hl.map(h=>`<option value="${h.id}" ${CA.hesap[v]===h.id?"selected":""}>${esc(h.ad)}</option>`).join("")}</select>`:`<span class="small muted">—</span>`;
+  const F=[...P.firmalar.values()].sort((a,b)=>a.ad.localeCompare(b.ad,"tr"));
+  const acilacak=f=>!f.cari&&(f.adet||CA.bosKart);
+  const yeni=F.filter(acilacak).length, mevcut=F.filter(f=>f.cari).length;
+  let tB=0,tA=0; for(const f of F){ tB+=f.borc; tA+=f.alacak; }
+  const notlar=[P.kayitli?`${P.kayitli} satır daha önce aktarılmış, atlandı.`:"",P.kilitli?`${P.kilitli} satır kilitli dönemde, atlandı.`:"",P.bos?`${P.bos} satırda firma adı yok, atlandı.`:"",P.sifir?`${P.sifir} satırda tutar sıfır.`:""].filter(Boolean);
+  $("#caOn").innerHTML=`<div class="panel"><header><h2>İşlem türleri</h2><span class="small muted">Excel'deki her değer için programda ne olacağını seçin</span></header><div class="tw"><table><thead><tr><th>Excel'deki değer</th><th class="r">Satır</th><th>Programda</th><th>Kasa / banka</th></tr></thead><tbody>
+    ${Object.keys(CA.esle).filter(v=>CA.say[v]).map(v=>`<tr><td><b>${esc(CA.etiket[v])}</b></td><td class="r">${CA.say[v]}</td><td>${turSec(v)}</td><td>${hesSec(v)}</td></tr>`).join("")}
+  </tbody></table></div></div>
+  <div class="panel"><header><h2>Firmalar (${F.length})</h2><div class="filters">
+    <label>Yeni carilerin tipi<select id="ca_tip">${Object.entries(CTIP).map(([a,b])=>`<option value="${a}" ${CA.tip===a?"selected":""}>${b}</option>`).join("")}</select></label>
+    <label style="flex-direction:row;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="ca_bos" ${CA.bosKart?"checked":""}> Tutarı sıfır olan firmalara da cari kartı aç</label>
+    ${k.tarih<0||P.tarihsiz?`<label>Tarihi olmayan satırlar için<input type="date" id="ca_tar" value="${CA.varsTarih}"></label>`:""}
+  </div></header>
+  ${notlar.length?`<div class="pad" style="padding-bottom:0"><div class="notice small">${notlar.join(" ")}</div></div>`:""}
+  <div class="tw" style="max-height:46vh;overflow:auto"><table><thead><tr><th>Firma</th><th>Durum</th><th class="r">Satır</th><th class="r">Borç</th><th class="r">Alacak</th><th class="r">Aktarımdan sonra bakiye</th></tr></thead><tbody>
+    ${F.slice(0,500).map(f=>{ const once=f.cari?(S.D.cari.get(f.cari.id)?.bak||0):0, son=r2(once+f.borc-f.alacak), dv=f.cari?.doviz||"TRY";
+      const durum=f.cari?`<span class="pill">Mevcut · ${esc(f.cari.kod)}</span>`:acilacak(f)?`<span class="pill acc">Yeni cari · ${KOD_ON[CA.tip]||"C"}…</span>`:`<span class="pill">Açılmayacak</span>`;
+      return `<tr><td>${esc(f.ad)}</td><td>${durum}</td><td class="r">${f.adet}</td><td class="r amt">${f.borc?m(f.borc):""}</td><td class="r amt">${f.alacak?m(f.alacak):""}</td><td class="r">${bal(son,dv)}</td></tr>`; }).join("")}
+  </tbody><tfoot><tr><td>Toplam</td><td>${yeni} yeni · ${mevcut} mevcut</td><td class="r">${P.kayit.length}</td><td class="r amt">${m(tB)}</td><td class="r amt">${m(tA)}</td><td></td></tr></tfoot></table></div>${F.length>500?`<p class="pad small muted" style="margin:0">İlk 500 firma gösteriliyor; hepsi aktarılır.</p>`:""}</div>`;
+  $("#caOzet").textContent=`${yeni} yeni cari açılacak · ${P.kayit.length} satır işlenecek`;
+  $("#caGo").disabled=!(yeni||P.kayit.length)||!S.canWrite;
+}
+function caKaydet(){
+  const P=CA.plan; if(!P||!S.canWrite) return;
+  const aid=uid("ca"), st=stamp();
+  const yeniKod=kodSayaci();
+  let yeniC=0, hr=0;
+  for(const F of P.firmalar.values()){
+    if(F.cari||!(F.adet||CA.bosKart)) continue;
+    const id=uid("cr");
+    S.data.cariler[id]={id,kod:yeniKod(CA.tip),tip:CA.tip,unvan:F.ad,vkn:F.vkn,vd:"",doviz:"TRY",limit:null,yetkili:"",tel:"",eposta:"",iban:"",adres:"",not:"",caAktarim:aid,...st};
+    F.yeniId=id; yeniC++;
+  }
+  for(const r of P.kayit){ const cid=r.F.cari?.id||r.F.yeniId; if(!cid) continue; for(const x of caHareket(r,cid,r.F.cari?.doviz||"TRY",aid,st)){ S.data.hareketler[x.id]=x; hr++; } }
+  S.data.cariAktarim=[{id:aid,tarih:new Date().toISOString(),dosya:CA.dosya,by:S.me||null},...(S.data.cariAktarim||[])].slice(0,30);
+  closeModal(); changed(); toast(`${yeniC} yeni cari açıldı, ${hr} hareket işlendi`);
+}
+function cariAktarimPanel(){
+  const H=Object.values(S.data.hareketler), C=Object.values(S.data.cariler);
+  const L=(S.data.cariAktarim||[]).map(a=>({a,h:H.filter(x=>x.caAktarim===a.id).length,c:C.filter(x=>x.caAktarim===a.id).length})).filter(x=>x.h||x.c).slice(0,5);
+  if(!L.length) return "";
+  return `<section class="panel"><header><h2>Excel'den cari aktarımları</h2></header><div class="tw"><table><thead><tr><th>Aktarım</th><th>Dosya</th><th class="r">Açılan cari</th><th class="r">Hareket</th><th></th></tr></thead><tbody>
+  ${L.map(({a,h,c})=>{ const d=new Date(a.tarih); return `<tr><td class="small">${trDate(iso(d))} ${d.toTimeString().slice(0,5)}${a.by?`<div class="muted">${esc(a.by)}</div>`:""}</td><td class="small muted">${esc(a.dosya||"")}</td><td class="r">${c}</td><td class="r">${h}</td><td><button class="btn sm" data-act="caGeriAl" data-id="${a.id}" data-w>Geri al</button></td></tr>`; }).join("")}
+  </tbody></table></div></section>`;
+}
+Object.assign(ACT,{
+  cariAktar:()=>cariAktarAc(),
+  kodDuzenle:el=>{ if(!S.canEdit) return; const L=eskiKodlu(); if(!L.length) return;
+    if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent=`${L.length} cari yeniden kodlansın mı? Onayla`; return; }
+    const sayac=kodSayaci(); L.sort((a,b)=>(+a.kod.slice(1))-(+b.kod.slice(1)));
+    for(const c of L) S.data.cariler[c.id].kod=sayac(c.tip);
+    changed(); toast(`${L.length} cari yeniden kodlandı`); },
+  caGeriAl:el=>{
+    const id=el.dataset.id, hs=Object.values(S.data.hareketler).filter(h=>h.caAktarim===id);
+    if(hs.some(h=>kilitli(h.tarih))) return toast("Bu aktarımda kilitli döneme ait hareketler var; geri alınamaz.");
+    if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent="Geri almayı onayla"; return; }
+    for(const h of hs) delete S.data.hareketler[h.id];
+    let sil=0, kalan=0; const H=Object.values(S.data.hareketler), K=Object.values(S.data.cekler);
+    for(const c of Object.values(S.data.cariler)) if(c.caAktarim===id){ if(H.some(h=>h.cariId===c.id)||K.some(k=>k.cariId===c.id||k.ciroCariId===c.id)) kalan++; else { delete S.data.cariler[c.id]; sil++; } }
+    changed(); toast(`${hs.length} hareket ve ${sil} cari kartı geri alındı${kalan?`; sonradan işlem girilen ${kalan} cari korundu`:""}`);
+  }
+});
+
 function bankaAktarimPanel(){
   const L=(S.data.bankaAktarim||[]).filter(a=>Object.values(S.data.hareketler).some(h=>h.bankaAktarim===a.id)).slice(0,8);
   if(!L.length) return "";
@@ -2287,7 +2456,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.2.1";
+const SURUM="1.3.1";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
