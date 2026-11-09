@@ -524,6 +524,9 @@ const slug = s => (String(s||"firma").toLocaleLowerCase("tr").replace(/ı/g,"i")
 const yeniDosyaAdi = () => "firma-"+Array.from(rnd(5),b=>"abcdefghjkmnpqrstuvwxyz23456789"[b%31]).join("")+".skypro.json";
 
 /* klasör */
+function klasorHata(t){ startShow(panel("",`<div class="pad" style="display:flex;flex-direction:column;gap:12px"><div class="notice bad">${esc(t)}</div>
+  <p class="small muted" style="margin:0">Google Drive kullanıyorsanız: klasör seçme penceresinde soldan <b>Google Drive (G:)</b> → <b>Drive'ım</b> → <b>SKYPRO</b> klasörüne girip <b>Klasörü seç</b>'e basın. Drive'ın kendisini (G:) ya da Drive'ım'ı değil, içindeki SKYPRO klasörünü seçin.</p>
+  <div class="btns"><button class="btn pri" data-act="klasorSec">Veri klasörünü seç</button></div></div>`)); }
 function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open("skypro",1); r.onupgradeneeded=()=>r.result.createObjectStore("kv"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function kvGet(k){ try{ const db=await idb(); return await new Promise(res=>{ const q=db.transaction("kv").objectStore("kv").get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>res(null); }); }catch{ return null; } }
 async function kvSet(k,v){ try{ const db=await idb(); await new Promise(res=>{ const t=db.transaction("kv","readwrite"); t.objectStore("kv").put(v,k); t.oncomplete=res; t.onerror=res; }); }catch{} }
@@ -531,7 +534,9 @@ function startShow(html){ $("#app").hidden=true; $("#start").hidden=false; $("#s
 const panel = (h,body) => `<div class="panel">${h?`<header><h2>${h}</h2></header>`:""}${body}</div>`;
 async function dosyalariOku(){
   const out=[];
-  const ekle=async(yol,h)=>{ try{ const fl=await h.getFile(); out.push({dosya:yol,f:JSON.parse(await fl.text()),mod:fl.lastModified}); }catch{} };
+  const zaman=(p,ms)=>Promise.race([p,new Promise((_,r)=>setTimeout(()=>r(new Error("zaman aşımı")),ms))]);
+  const ekle=async(yol,h)=>{ try{ const fl=await zaman(h.getFile(),30000); out.push({dosya:yol,f:JSON.parse(await zaman(fl.text(),30000)),mod:fl.lastModified}); }catch(e){ console.warn("okunamadı",yol,e); (S.okunamayan||(S.okunamayan=[])).push(yol); } };
+  S.okunamayan=[];
   for await (const [n,h] of S.dir.entries()){
     if(h.kind==="file"&&n.endsWith(".skypro.json")) await ekle(n,h);
     else if(h.kind==="directory"&&n!=="yedek"&&!n.startsWith(".")){ try{ for await (const [n2,h2] of h.entries()) if(h2.kind==="file"&&n2.endsWith(".skypro.json")) await ekle(n+"/"+n2,h2); }catch{} }
@@ -552,12 +557,12 @@ async function startScreen(mesaj){
   const dosyalar=await dosyalariOku();
   const sifresiz=dosyalar.filter(x=>!sifreli(x.f));
   if(!dosyalar.length){ startShow(`${mesaj?`<div class="notice">${esc(mesaj)}</div>`:""}${panel("Kurulum",`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
-    <p style="margin:0">Bu bilgisayarda henüz firma yok.</p>
+    <p style="margin:0">Seçilen <b>${esc(S.dir.name)}</b> klasöründe firma dosyası (.skypro.json) bulunamadı.${S.okunamayan?.length?` ${S.okunamayan.length} dosya okunamadı; Drive eşitlemesinin bitmesini bekleyip sayfayı yenileyin.`:""} Yanlış klasörü seçtiyseniz <a href="#" data-act="klasorSec">başka klasör seçin</a>.</p>
     <p class="small muted" style="margin:0"><b>Firma kullanıcısıysanız:</b> mali müşavirinizden gelen firma dosyasını <b>Dosyadan firma ekle</b> ile seçin, sonra kullanıcı adı ve parolanızla girin.</p>
     <div class="btns"><label class="btn pri" for="yf_imp" style="cursor:pointer">Dosyadan firma ekle</label><button class="btn" data-act="yeniFirmaKur">Yeni firma oluştur</button><button class="btn" data-act="ornekFirma">Örnek verili deneme firması</button></div>
     <input type="file" id="yf_imp" accept=".json" hidden></div>`)}`); return impBagla(); }
   startShow(`${mesaj?`<div class="notice">${esc(mesaj)}</div>`:""}
-  <div class="small muted" style="text-align:center">Veri klasörü: <b>${esc(S.dir.name)}</b> · ${dosyalar.length} firma dosyası bulundu</div>
+  <div class="small muted" style="text-align:center">Veri klasörü: <b>${esc(S.dir.name)}</b> · ${dosyalar.length} firma dosyası bulundu${S.okunamayan?.length?` · <span style="color:var(--borc)">${S.okunamayan.length} dosya okunamadı</span>`:""}</div>
   <div class="panel" style="max-width:440px;width:100%"><header><h2>Giriş</h2></header>
   <form class="form" id="gForm" style="grid-template-columns:minmax(0,1fr)" autocomplete="off">
     <div class="f"><label for="g_k">Firma kodu</label><input type="text" id="g_k" autocapitalize="characters" spellcheck="false" placeholder="Mali müşavirinizin verdiği kod"><span class="hint">Yöneticiler boş bırakarak tüm firmalarını görebilir.</span></div>
@@ -1717,7 +1722,20 @@ document.addEventListener("click",e=>{
 
 /* ---------- başlatma ---------- */
 Object.assign(ACT,{
-  async klasorSec(){ try{ const d=await window.showDirectoryPicker({id:"skypro",mode:"readwrite"}); S.dir=d; await kvSet("dir",d); await startScreen(`Veri klasörü "${d.name}" seçildi. Kullanıcı adı ve parolanızla girin.`); }catch(e){ if(e?.name!=="AbortError") toast("Klasör seçilemedi: "+(e?.message||e?.name||"bilinmeyen hata")); } },
+  async klasorSec(){
+    let d, adim="seçim";
+    try{
+      d=await window.showDirectoryPicker({id:"skypro",mode:"readwrite"});
+      adim="izin"; let perm="granted"; try{ perm=await d.queryPermission({mode:"readwrite"}); if(perm!=="granted") perm=await d.requestPermission({mode:"readwrite"}); }catch{}
+      if(perm!=="granted") return klasorHata(`"${d.name}" klasörüne yazma izni verilmedi. Tekrar seçip tarayıcının sorduğu "Dosyaları düzenle / Değişiklikleri kaydet" sorusuna izin verin.`);
+      adim="okuma"; startShow(panel("",`<div class="pad">"${esc(d.name)}" klasörü okunuyor… Drive dosyaları ilk açılışta indirildiği için bu birkaç saniye sürebilir.</div>`));
+      S.dir=d; await kvSet("dir",d);
+      await startScreen(`Veri klasörü "${d.name}" seçildi. Kullanıcı adı ve parolanızla girin.`);
+    }catch(e){
+      if(e?.name==="AbortError"&&adim==="seçim") return klasorHata("Klasör seçimi iptal edildi ya da tarayıcı bu klasöre izin vermedi. Klasörü seçtikten sonra çıkan izin sorusunda \"Dosyaları düzenle\" / \"İzin ver\" seçeneğine basın.");
+      klasorHata(`Klasör ${adim==="seçim"?"seçilemedi":adim==="izin"?"için izin alınamadı":"okunamadı"}${d?` ("${d.name}")`:""}. Hata: ${e?.name||""} ${e?.message||""}`);
+    }
+  },
   async klasoreAyir(el){
     const L=(S.firmalar||[]).filter(x=>!x.dosya.includes("/")&&x.data.kullanicilar?.[x.u]?.rol==="yonetici"); if(!L.length) return;
     if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent=`${L.length} firma kendi klasörüne taşınsın mı? Onayla`; return; }
@@ -2827,7 +2845,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.6.1-önizleme";
+const SURUM="1.6.2-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
