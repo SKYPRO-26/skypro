@@ -2301,6 +2301,7 @@ Object.assign(ACT,{ topluSil:()=>topluSilModal(), topluDegistir:()=>topluDegisti
 const AY_TAM=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 const ayTam = ym => AY_TAM[+ym.slice(5,7)-1]+" "+ym.slice(0,4);
 const aySonu = ym => iso(new Date(+ym.slice(0,4),+ym.slice(5,7),0));
+const sonrakiAySonu = d => iso(new Date(+d.slice(0,4),+d.slice(5,7)+1,0));
 const modulAcik = ad => !!S.ayar?.moduller?.[ad];
 function tkAyar(){ const a=S.data.tahakkuk||(S.data.tahakkuk={mod:"net",ucret:{},gecmis:[]}); a.ucret=a.ucret||{}; a.gecmis=a.gecmis||[]; a.mod=a.mod||"net"; return a; }
 function tkHesap(u,mod){ const t=num(u?.tutar)||0; if(mod!=="brut") return {brut:t,kdv:0,stopaj:0,net:r2(t)};
@@ -2308,34 +2309,53 @@ function tkHesap(u,mod){ const t=num(u?.tutar)||0; if(mod!=="brut") return {brut
 function tkYapilan(ay){ const s=new Set(); for(const h of S.hareketler) if(h.tahakkukAy===ay&&h.tur==="satis") s.add(h.cariId); return s; }
 function tkListe(){ const A=tkAyar(), f=S.view.tk, q=(f.q||"").toLocaleLowerCase("tr");
   return sortedCariler().filter(c=>c.doviz==="TRY"&&(f.tumu||["musteri","ikisi"].includes(c.tip)||num(A.ucret[c.id]?.tutar)>0)&&(!q||(c.unvan+" "+c.kod).toLocaleLowerCase("tr").includes(q))); }
+function tkPlan(){ const A=tkAyar(), f=S.view.tk;
+  if(f.planAy!==f.ay){ f.planAy=f.ay; f.tarih=aySonu(f.ay); f.vade=sonrakiAySonu(f.tarih); }
+  return {tarih:f.tarih, vade:f.vade, kat:A.kategori||"Hizmet geliri", ack:(A.aciklama||"{AY} muhasebe ücreti").replace("{AY}",ayTam(f.ay)), belge:"TAH-"+f.ay}; }
+function tkKayitlar(ay){ const M=new Map(); for(const h of S.hareketler){ if(h.tahakkukAy!==ay) continue; const x=M.get(h.cariId)||{net:0}; if(h.tur==="satis"){ x.f=h; x.net+=h.tutar; } else if(h.tur==="alacak_dekont") x.net-=h.tutar; M.set(h.cariId,x); } return M; }
 function vTahakkuk(){
   if(!modulAcik("tahakkuk")) return {title:"Aylık tahakkuk",btns:" ",html:`<div class="notice">Bu modül bu firmada kapalı. Yönetici <a href="#ayarlar">Ayarlar → Ek modüller</a> bölümünden açabilir.</div>`};
-  const A=tkAyar(), f=S.view.tk||(S.view.tk={ay:TODAY.slice(0,7),tumu:false,q:""}), yap=tkYapilan(f.ay), L=tkListe(), brut=A.mod==="brut", dis=S.canWrite?"":"disabled";
+  const A=tkAyar(), f=S.view.tk||(S.view.tk={ay:TODAY.slice(0,7),tumu:false,q:""}), P=tkPlan(), K=tkKayitlar(f.ay), L=tkListe(), brut=A.mod==="brut", dis=S.canWrite?"":"disabled";
   const aylar=[]; { const d=new Date(+TODAY.slice(0,4),+TODAY.slice(5,7)-13,1); for(let i=0;i<15;i++){ aylar.push(iso(d).slice(0,7)); d.setMonth(d.getMonth()+1); } }
+  const bekleyen=L.filter(c=>!K.has(c.id)&&tkHesap(A.ucret[c.id],A.mod).net>0).length;
   const html=`<section class="panel"><div class="pad filters" style="align-items:end">
     <label>Tahakkuk ayı<select id="tk_ay">${aylar.map(a=>`<option value="${a}" ${f.ay===a?"selected":""}>${ayTam(a)}</option>`).join("")}</select></label>
+    <label>Kayıt tarihi<input type="date" id="tk_t" value="${P.tarih}" ${dis}></label>
+    <label>Vade (sonraki ay sonu)<input type="date" id="tk_v" value="${P.vade}" ${dis}></label>
+    <label>Gelir türü<input type="text" id="tk_k" list="tkKatList" value="${esc(P.kat)}" style="width:170px" ${dis}><datalist id="tkKatList">${turListe("gelir").map(t=>`<option value="${esc(t)}">`).join("")}</datalist></label>
+    <label style="flex:1;min-width:220px">Açıklama<input type="text" id="tk_a" value="${esc(P.ack)}" ${dis}></label>
+  </div><div class="pad filters" style="padding-top:0;align-items:end">
     <label>Tutar girişi<select id="tk_mod" ${dis}><option value="net" ${!brut?"selected":""}>Cariye işlenecek tutar</option><option value="brut" ${brut?"selected":""}>Brüt ücret (KDV ve stopaj hesaplansın)</option></select></label>
     <label>Ara<input type="search" id="tk_q" value="${esc(f.q)}" placeholder="Müşteri adı veya kodu"></label>
     <label style="flex-direction:row;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="tk_tumu" ${f.tumu?"checked":""}> Satıcı ve diğer carileri de göster</label>
+    ${kilitli(P.tarih)?`<span class="pill bad" style="margin-bottom:8px">Kayıt tarihi kilitli dönemde</span>`:""}
   </div></section>
-  <section class="panel"><header><h2>Aylık ücretler</h2><div class="filters" data-w><label>Toplu artış<input type="text" id="tk_zam" inputmode="decimal" placeholder="% örn. 25" style="width:110px"></label><button class="btn sm" data-act="tkZam">Tüm ücretlere uygula</button></div></header>
-  ${L.length?`<div class="tw"><table id="tkTablo"><thead><tr><th>Kod</th><th>Müşteri</th><th class="r">${brut?"Brüt ücret":"Aylık tutar"}</th>${brut?`<th class="r">KDV</th><th>Stopaj %20</th><th class="r">Cariye işlenecek</th>`:""}<th>${esc(ayTam(f.ay))}</th></tr></thead><tbody>
-  ${L.map(c=>{ const u=A.ucret[c.id]||{}, h=tkHesap(u,A.mod);
-    return `<tr><td class="mono small">${esc(c.kod)}</td><td>${esc(c.unvan)}</td>
-    <td class="r"><input type="text" class="tkIn" data-tk="${c.id}" data-f="tutar" inputmode="decimal" value="${u.tutar?m(u.tutar):""}" placeholder="0,00" style="width:130px;text-align:right" ${dis} aria-label="${esc(c.unvan)} aylık ücret"></td>
-    ${brut?`<td class="r"><select data-tk="${c.id}" data-f="kdv" ${dis}>${[20,10,1,0].map(k=>`<option value="${k}" ${(u.kdv??20)===k?"selected":""}>%${k}</option>`).join("")}</select></td>
-      <td><input type="checkbox" data-tk="${c.id}" data-f="stopaj" ${u.stopaj?"checked":""} ${dis} aria-label="Stopaj"></td>
+  <section class="panel"><header><h2>Aylık ücretler · ${esc(ayTam(f.ay))}</h2><div class="filters" data-w><label>Toplu artış<input type="text" id="tk_zam" inputmode="decimal" placeholder="% örn. 25" style="width:110px"></label><button class="btn sm" data-act="tkZam">Tüm ücretlere uygula</button></div></header>
+  ${L.length?`<div class="tw"><table id="tkTablo"><thead><tr><th>Kod</th><th>Müşteri</th><th class="r">${brut?"Brüt ücret":"Aylık tutar"}</th>${brut?`<th class="r">KDV</th><th>Stopaj</th><th class="r">Cariye işlenecek</th>`:""}<th>Tahakkuk tarihi</th><th>Vade</th><th>Açıklama</th><th>Belge no</th><th>Durum</th></tr></thead><tbody>
+  ${L.map(c=>{ const u=A.ucret[c.id]||{}, h=tkHesap(u,A.mod), k=K.get(c.id);
+    return `<tr${k?' style="background:var(--alacak-soft)"':""}><td class="mono small">${esc(c.kod)}</td><td>${esc(c.unvan)}</td>
+    <td class="r"><input type="text" class="tkIn" data-tk="${c.id}" data-f="tutar" inputmode="decimal" value="${u.tutar?m(u.tutar):""}" placeholder="0,00" style="width:120px;text-align:right" ${dis} aria-label="${esc(c.unvan)} aylık ücret"></td>
+    ${brut?`<td class="r"><select data-tk="${c.id}" data-f="kdv" ${dis}>${[20,10,1,0].map(x=>`<option value="${x}" ${(u.kdv??20)===x?"selected":""}>%${x}</option>`).join("")}</select></td>
+      <td style="text-align:center"><input type="checkbox" data-tk="${c.id}" data-f="stopaj" ${u.stopaj?"checked":""} ${dis} aria-label="Stopaj %20"></td>
       <td class="r amt" data-net="${c.id}">${h.net?m(h.net):""}</td>`:""}
-    <td data-durum="${c.id}">${yap.has(c.id)?`<span class="pill ok">Tahakkuk edildi</span>`:h.net>0?`<span class="pill warn">Bekliyor</span>`:`<span class="small muted">—</span>`}</td></tr>`; }).join("")}
-  </tbody><tfoot><tr><td colspan="2">Toplam</td><td class="r amt" id="tkTopBrut"></td>${brut?`<td class="r amt" id="tkTopKdv"></td><td class="amt" id="tkTopStp"></td><td class="r amt" id="tkTopNet"></td>`:""}<td></td></tr></tfoot></table></div>`
+    <td class="mono small" data-plan="${c.id}" data-k="tarih">${tkSatirBilgi(k,h,P,"tarih")}</td>
+    <td class="mono small" data-plan="${c.id}" data-k="vade">${tkSatirBilgi(k,h,P,"vade")}</td>
+    <td class="small" data-plan="${c.id}" data-k="ack" style="min-width:180px">${tkSatirBilgi(k,h,P,"ack")}</td>
+    <td class="mono small" data-plan="${c.id}" data-k="belge">${tkSatirBilgi(k,h,P,"belge")}</td>
+    <td data-durum="${c.id}">${tkDurum(k,h)}</td></tr>`; }).join("")}
+  </tbody><tfoot><tr><td colspan="2">Toplam</td><td class="r amt" id="tkTopBrut"></td>${brut?`<td class="r amt" id="tkTopKdv"></td><td class="amt" id="tkTopStp"></td><td class="r amt" id="tkTopNet"></td>`:""}<td colspan="5" class="small" style="font-weight:400" id="tkSay">${K.size} tahakkuk edildi · ${bekleyen} bekliyor</td></tr></tfoot></table></div>`
   :`<div class="empty">Listelenecek müşteri yok. Cari hesaplar bölümünden müşteri tipinde cari açın.</div>`}
-  <div class="pad small muted" style="border-top:1px solid var(--line)">Tutarlar yazıldığı anda kaydedilir. Enter ile alt satıra geçebilirsiniz.${brut?" Brüt modda cariye işlenecek tutar = brüt ücret + KDV − stopaj. Stopaj, ücretten vergi kesintisi yapan (şirket vb.) müşteriler için işaretlenir.":""}</div></section>
-  ${A.gecmis.length?`<section class="panel"><header><h2>Yapılan tahakkuklar</h2></header><div class="tw"><table><thead><tr><th>Ay</th><th>Tarih</th><th class="r">Müşteri</th><th class="r">Toplam</th><th>Yapan</th><th></th></tr></thead><tbody>
+  <div class="pad small muted" style="border-top:1px solid var(--line)">Tutarlar yazıldığı anda kaydedilir; Enter ile alt satıra geçebilirsiniz. Soluk yazılan tarih, vade ve açıklama yapılacak kaydı; koyu yazılanlar işlenmiş kaydı gösterir.${brut?" Brüt modda cariye işlenecek tutar = brüt ücret + KDV − stopaj. Stopaj, ücretten vergi kesintisi yapan (şirket vb.) müşteriler için işaretlenir.":""}</div></section>
+  ${A.gecmis.length?`<section class="panel"><header><h2>Yapılan tahakkuklar</h2></header><div class="tw"><table><thead><tr><th>Ay</th><th>Kayıt tarihi</th><th class="r">Müşteri</th><th class="r">Toplam</th><th>Yapan</th><th></th></tr></thead><tbody>
   ${A.gecmis.slice(0,24).map(g=>{ const n=S.hareketler.filter(h=>h.tahakkukId===g.id&&h.tur==="satis").length; return `<tr><td>${ayTam(g.ay)}</td><td class="mono small">${trDate(g.tarih)}</td><td class="r">${n}</td><td class="r amt">${m(g.toplam)}</td><td class="small muted">${esc(g.by||"")}</td><td>${n?`<button class="btn sm" data-act="tkGeriAl" data-id="${g.id}" data-w>Geri al</button>`:`<span class="small muted">geri alındı</span>`}</td></tr>`; }).join("")}
   </tbody></table></div></section>`:""}`;
-  return {title:`Aylık tahakkuk<span class="sub">${esc(ayTam(f.ay))} · ${yap.size} müşteri tahakkuk edildi</span>`,btns:`<button class="btn pri" data-act="tkYap" data-w>${esc(ayTam(f.ay))} tahakkukunu yap</button>`,html,after(){
+  return {title:`Aylık tahakkuk<span class="sub">${esc(ayTam(f.ay))} · kayıt tarihi ${trDate(P.tarih)} · ${K.size} müşteri tahakkuk edildi</span>`,btns:`<button class="btn pri" data-act="tkYap" data-w>${esc(ayTam(f.ay))} tahakkukunu yap</button>`,html,after(){
     tkToplam();
     $("#tk_ay").addEventListener("change",e=>{ f.ay=e.target.value; render(); });
+    $("#tk_t")?.addEventListener("change",e=>{ if(!e.target.value) return; f.tarih=e.target.value; f.vade=sonrakiAySonu(f.tarih); render(); });
+    $("#tk_v")?.addEventListener("change",e=>{ if(!e.target.value) return; f.vade=e.target.value; render(); });
+    $("#tk_k")?.addEventListener("change",e=>{ A.kategori=e.target.value.trim()||"Hizmet geliri"; scheduleSave(); });
+    $("#tk_a")?.addEventListener("change",e=>{ const v=e.target.value.trim()||"{AY} muhasebe ücreti"; A.aciklama=v.split(ayTam(f.ay)).join("{AY}"); render(); scheduleSave(); });
     $("#tk_mod")?.addEventListener("change",e=>{ A.mod=e.target.value; changed(); });
     $("#tk_tumu").addEventListener("change",e=>{ f.tumu=e.target.checked; render(); });
     $("#tk_q").addEventListener("input",e=>{ f.q=e.target.value; const p=e.target.selectionStart; render(); const i=$("#tk_q"); i.focus(); i.setSelectionRange(p,p); });
@@ -2344,45 +2364,48 @@ function vTahakkuk(){
       if(t.dataset.f==="tutar"){ const v=num(t.value); if(t.value.trim()&&!(v>=0)){ t.style.borderColor="var(--borc)"; toast("Geçerli bir tutar yazın, örn. 7.500,00"); return; } t.style.borderColor=""; if(v>0){ u.tutar=r2(v); t.value=m(u.tutar); } else { delete u.tutar; t.value=""; } }
       else if(t.dataset.f==="kdv") u.kdv=+t.value; else if(t.dataset.f==="stopaj") u.stopaj=t.checked;
       if(!Object.keys(u).length) delete A.ucret[id];
-      const h=tkHesap(u,A.mod), net=document.querySelector(`[data-net="${id}"]`); if(net) net.textContent=h.net?m(h.net):"";
-      const du=document.querySelector(`[data-durum="${id}"]`); if(du&&!yap.has(id)) du.innerHTML=h.net>0?`<span class="pill warn">Bekliyor</span>`:`<span class="small muted">—</span>`;
+      const h=tkHesap(u,A.mod), k=K.get(id), net=document.querySelector(`[data-net="${id}"]`); if(net) net.textContent=h.net?m(h.net):"";
+      document.querySelectorAll(`[data-plan="${id}"]`).forEach(td=>td.innerHTML=tkSatirBilgi(k,h,P,td.dataset.k));
+      const du=document.querySelector(`[data-durum="${id}"]`); if(du) du.innerHTML=tkDurum(k,h);
       tkToplam(); setSave("Kaydediliyor…"); scheduleSave(); });
     tb.addEventListener("keydown",e=>{ if(e.key!=="Enter"||!e.target.classList.contains("tkIn")) return; e.preventDefault(); const L=[...tb.querySelectorAll(".tkIn")], i=L.indexOf(e.target); e.target.dispatchEvent(new Event("change",{bubbles:true})); (L[i+1]||L[i]).focus(); (L[i+1]||L[i]).select(); });
   }};
 }
-function tkToplam(){ const A=tkAyar(); let b=0,k=0,s=0,n=0; for(const c of tkListe()){ const h=tkHesap(A.ucret[c.id],A.mod); b+=h.brut; k+=h.kdv; s+=h.stopaj; n+=h.net; }
-  const y=(id,v)=>{ const el=$(id); if(el) el.textContent=m(v); }; y("#tkTopBrut",b); y("#tkTopKdv",k); y("#tkTopNet",n); const st=$("#tkTopStp"); if(st) st.textContent=s?"− "+m(s):""; }
+function tkSatirBilgi(k,h,P,alan){
+  if(k?.f){ const x=k.f; return alan==="tarih"?trDate(x.tarih):alan==="vade"?(x.vade?trDate(x.vade):"—"):alan==="ack"?esc(x.aciklama||""):esc(x.belgeNo||""); }
+  if(!(h.net>0)) return `<span class="muted">—</span>`;
+  const v=alan==="tarih"?trDate(P.tarih):alan==="vade"?(P.vade?trDate(P.vade):"—"):alan==="ack"?esc(P.ack):esc(P.belge);
+  return `<span class="muted">${v}</span>`;
+}
+function tkDurum(k,h){
+  if(k) return `<span class="pill ok">Tahakkuk edildi</span>${Math.abs(k.net-h.net)>0.004&&h.net>0?`<div class="small muted">işlenen ${m(k.net)}</div>`:""}`;
+  return h.net>0?`<span class="pill warn">Bekliyor</span>`:`<span class="small muted">—</span>`;
+}
+function tkToplam(){ const A=tkAyar(), Ks=tkKayitlar(S.view.tk.ay); let b=0,k=0,s=0,n=0,bek=0; for(const c of tkListe()){ if(!Ks.has(c.id)&&tkHesap(A.ucret[c.id],A.mod).net>0) bek++; const h=tkHesap(A.ucret[c.id],A.mod); b+=h.brut; k+=h.kdv; s+=h.stopaj; n+=h.net; }
+  const y=(id,v)=>{ const el=$(id); if(el) el.textContent=m(v); }; y("#tkTopBrut",b); y("#tkTopKdv",k); y("#tkTopNet",n); const st=$("#tkTopStp"); if(st) st.textContent=s?"− "+m(s):""; const sy=$("#tkSay"); if(sy) sy.textContent=`${Ks.size} tahakkuk edildi · ${bek} bekliyor`; }
 function tkYapModal(){
-  const A=tkAyar(), ay=S.view.tk.ay, yap=tkYapilan(ay);
+  const A=tkAyar(), ay=S.view.tk.ay, P=tkPlan(), yap=tkYapilan(ay);
   const L=sortedCariler().filter(c=>c.doviz==="TRY").map(c=>({c,h:tkHesap(A.ucret[c.id],A.mod)})).filter(x=>x.h.net>0||x.h.brut>0);
   const yeni=L.filter(x=>!yap.has(x.c.id)), eski=L.length-yeni.length, top=yeni.reduce((s,x)=>s+x.h.net,0);
   if(!L.length) return toast("Önce tabloya aylık ücretleri yazın.");
-  modal(`${ayTam(ay)} tahakkuku`,`<form class="form" id="tkForm">
-    <div class="f w"><p style="margin:0">${yeni.length?`<b>${yeni.length} müşterinin</b> carisine toplam <b>${money(top)}</b> işlenecek.`:"Bu ay için tahakkuk edilecek müşteri kalmadı."}${eski?` ${eski} müşteri bu ay zaten tahakkuk edildiği için atlanacak.`:""}</p></div>
-    <div class="f"><label for="tk_t">Kayıt tarihi</label><input type="date" id="tk_t" value="${aySonu(ay)}" required></div>
-    <div class="f"><label for="tk_v">Son ödeme (vade) tarihi</label><input type="date" id="tk_v" value="${addDays(aySonu(ay),10)}"></div>
-    <div class="f"><label for="tk_k">Gelir türü</label><input type="text" id="tk_k" list="tkKatList" value="${esc(A.kategori||"Hizmet geliri")}"><datalist id="tkKatList">${turListe("gelir").map(t=>`<option value="${esc(t)}">`).join("")}</datalist></div>
-    <div class="f"><label for="tk_a">Açıklama</label><input type="text" id="tk_a" value="${esc((A.aciklama||"{AY} muhasebe ücreti").replace("{AY}",ayTam(ay)))}"></div>
-    <p class="hint f w">Her müşteri için cariye "Satış faturası" kaydı (gelir raporunda görünür)${A.mod==="brut"?" ve stopajı işaretli müşterilerde stopaj kadar alacak dekontu":""} oluşturulur.</p>
-    <p class="err" id="mErr" hidden></p></form>`,
-    `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button>${yeni.length?`<button class="btn pri" type="submit" form="tkForm">Tahakkuk yap</button>`:""}</div>`);
-  $("#tkForm").addEventListener("submit",e=>{
-    e.preventDefault();
-    const tarih=$("#tk_t").value, vade=$("#tk_v").value, kat=$("#tk_k").value.trim()||"Hizmet geliri", ackS=$("#tk_a").value.trim();
-    if(!tarih) return showErr("Kayıt tarihini girin.");
-    if(kilitli(tarih)) return showErr(`${trDate(S.kilit)} ve öncesi kilitli; bu tarihe kayıt atılamaz.`);
-    if(!katListe().some(x=>x.toLocaleLowerCase("tr")===kat.toLocaleLowerCase("tr"))) turEkle("gelir",kat);
-    A.kategori=kat; A.aciklama=ackS.replace(ayTam(ay),"{AY}");
+  if(kilitli(P.tarih)) return toast(`Kayıt tarihi ${trDate(P.tarih)} kilitli dönemde; tablonun üstünden tarihi değiştirin.`);
+  modal(`${ayTam(ay)} tahakkuku`,`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
+    <p style="margin:0">${yeni.length?`<b>${yeni.length} müşterinin</b> carisine toplam <b>${money(top)}</b> işlenecek.`:"Bu ay için tahakkuk edilecek müşteri kalmadı."}${eski?` ${eski} müşteri bu ay zaten tahakkuk edildiği için atlanacak.`:""}</p>
+    <dl class="info"><dt>Kayıt tarihi</dt><dd class="mono">${trDate(P.tarih)}</dd><dt>Vade</dt><dd class="mono">${P.vade?trDate(P.vade):"—"}</dd><dt>Gelir türü</dt><dd>${esc(P.kat)}</dd><dt>Açıklama</dt><dd>${esc(P.ack)}</dd><dt>Belge no</dt><dd class="mono">${esc(P.belge)}</dd></dl>
+    <p class="small muted" style="margin:0">Her müşteri için cariye "Satış faturası" kaydı (gelir raporunda görünür)${A.mod==="brut"?" ve stopajı işaretli müşterilerde stopaj kadar alacak dekontu":""} oluşturulur. Bilgileri değiştirmek için pencereyi kapatıp tablonun üstündeki alanları düzenleyin.</p></div>`,
+    `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button>${yeni.length?`<button class="btn pri" id="tkGo">Tahakkuk yap</button>`:""}</div>`);
+  $("#tkGo")?.addEventListener("click",()=>{
+    if(!katListe().some(x=>x.toLocaleLowerCase("tr")===P.kat.toLocaleLowerCase("tr"))) turEkle("gelir",P.kat);
     const tid=uid("tk"), st=stamp(), simdi=tkYapilan(ay); let n=0, top=0;
     for(const {c,h} of yeni){
       if(simdi.has(c.id)) continue;
-      const base={tarih,cariId:c.id,doviz:"TRY",kur:1,belgeNo:"TAH-"+ay,aciklama:ackS,tahakkukAy:ay,tahakkukId:tid,...st};
+      const base={tarih:P.tarih,cariId:c.id,doviz:"TRY",kur:1,belgeNo:P.belge,aciklama:P.ack,tahakkukAy:ay,tahakkukId:tid,...st};
       const fid=uid("hr"), u=A.ucret[c.id]||{};
-      S.data.hareketler[fid]={...base,id:fid,tur:"satis",tutar:r2(h.brut+h.kdv),vade:vade||"",kategori:kat,...(A.mod==="brut"?{kdv:u.kdv??20}:{})};
-      if(h.stopaj>0){ const sid=uid("hr"); S.data.hareketler[sid]={...base,id:sid,tur:"alacak_dekont",tutar:h.stopaj,aciklama:"Stopaj kesintisi · "+ackS}; }
+      S.data.hareketler[fid]={...base,id:fid,tur:"satis",tutar:r2(h.brut+h.kdv),vade:P.vade||"",kategori:P.kat,...(A.mod==="brut"?{kdv:u.kdv??20}:{})};
+      if(h.stopaj>0){ const sid=uid("hr"); S.data.hareketler[sid]={...base,id:sid,tur:"alacak_dekont",tutar:h.stopaj,aciklama:"Stopaj kesintisi · "+P.ack}; }
       n++; top+=h.net;
     }
-    A.gecmis.unshift({id:tid,ay,tarih,adet:n,toplam:r2(top),at:st.at,by:S.me||null}); A.gecmis=A.gecmis.slice(0,60);
+    A.gecmis.unshift({id:tid,ay,tarih:P.tarih,adet:n,toplam:r2(top),at:st.at,by:S.me||null}); A.gecmis=A.gecmis.slice(0,60);
     closeModal(); changed(); toast(`${ayTam(ay)}: ${n} müşteriye toplam ${money(top)} tahakkuk edildi`);
   });
 }
@@ -2667,7 +2690,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.5.0-önizleme";
+const SURUM="1.5.1-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
