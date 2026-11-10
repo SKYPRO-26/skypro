@@ -321,7 +321,8 @@ const r2 = n => Math.round(n*100)/100;
 function bal(n,c="TRY",tag=true){
   if(Math.abs(n)<0.005) return `<span class="amt z">${money(0,c)}</span>`;
   const b=n>0;
-  return `<span class="amt ${b?"b":"a"}">${money(Math.abs(n),c)}${tag?`<i>${b?"B":"A"}</i>`:""}</span>`;
+  // renk: cari bize borçlu (B, alacağımız) yeşil · biz cariye borçlu (A, borcumuz) kırmızı
+  return `<span class="amt ${b?"a":"b"}">${money(Math.abs(n),c)}${tag?`<i>${b?"B":"A"}</i>`:""}</span>`;
 }
 const amt = (n,c) => `<span class="amt">${money(n,c)}</span>`;
 const uid = p => p+"-"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -972,8 +973,8 @@ function vOzet(){
   ${empty?`<div class="notice">Başlamak için önce <a href="#kasa-banka">kasa ve banka hesaplarınızı</a>, sonra <a href="#cariler">cari kartlarınızı</a> açın. Ardından sağ üstteki <b>Yeni işlem</b> ile fatura, tahsilat ve ödemeleri girin.</div>`:""}
   ${[...S.cariler.values(),...S.hareketler].some(x=>x.ornek)?`<div class="notice warn">Bu sayfada <b>örnek kayıtlar</b> var. Programı denedikten sonra <a href="#ayarlar">Ayarlar</a> bölümünden tek tuşla silebilirsiniz.</div>`:""}
   <div class="kpis">
-    <div class="kpi"><span class="l">Toplam alacak</span><span class="v" style="color:var(--borc)">${money(alacak)}</span><span class="n">Carilerin bize borcu (TL karşılığı)</span></div>
-    <div class="kpi"><span class="l">Toplam borç</span><span class="v" style="color:var(--alacak)">${money(borc)}</span><span class="n">Bizim carilere borcumuz</span></div>
+    <div class="kpi"><span class="l">Toplam alacak</span><span class="v" style="color:var(--alacak)">${money(alacak)}</span><span class="n">Carilerin bize borcu (TL karşılığı)</span></div>
+    <div class="kpi"><span class="l">Toplam borç</span><span class="v" style="color:var(--borc)">${money(borc)}</span><span class="n">Bizim carilere borcumuz</span></div>
     <div class="kpi"><span class="l">Kasa + banka</span><span class="v">${money(nakit)}</span><span class="n">${S.hesaplar.size} hesap, güncel kurla</span></div>
     <div class="kpi"><span class="l">Portföydeki çek/senet</span><span class="v">${money(port)}</span><span class="n">${portN} adet · verilen: ${money(verilen)}</span></div>
   </div>
@@ -1023,7 +1024,7 @@ function vCariler(){
     <label style="flex-direction:row;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="cfbak" ${f.bak?"checked":""}> Sadece bakiyeli</label>
   </div><button class="btn" data-act="excelCari">Excel'e aktar</button></header>
   ${rows.length?`<div class="tw"><table><thead><tr><th>Kod</th><th>Ünvan</th><th class="r">Bakiye</th><th class="r">TL karşılığı</th><th>Son hareket</th></tr></thead><tbody>${body}</tbody>
-  <tfoot><tr><td></td><td>${rows.length} cari</td><td class="r" colspan="2"><span class="amt b">${money(tB)}<i>B</i></span> &nbsp; <span class="amt a">${money(tA)}<i>A</i></span></td><td></td></tr></tfoot></table></div>`
+  <tfoot><tr><td></td><td>${rows.length} cari</td><td class="r" colspan="2"><span class="amt a">${money(tB)}<i>B</i></span> &nbsp; <span class="amt b">${money(tA)}<i>A</i></span></td><td></td></tr></tfoot></table></div>`
   :`<div class="empty">${S.cariler.size?"Filtreye uyan cari yok.":"Henüz cari kartı yok. Sağ üstten <b>Yeni cari</b> ile başlayın."}</div>`}</section>
   <p class="small muted">B: cari bize borçlu (alacağımız) · A: cari alacaklı (borcumuz). Dövizli carilerde TL karşılığı Ayarlar'daki güncel kurla hesaplanır.</p>
   ${cariAktarimPanel()}`;
@@ -3440,7 +3441,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.8.6-önizleme";
+const SURUM="1.8.7-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
