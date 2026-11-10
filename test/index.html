@@ -1467,7 +1467,10 @@ function islemForm(opt={}){
     const elle=b.value!==""&&b.value!==b.dataset.oto;
     if(olmali&&!b.dataset.sil&&!elle){ const y=tr.slice(0,4), no=seriNo("gelir",y,seriSon("gelir",y)+1); b.value=no; b.dataset.oto=no; }
     else if(!olmali&&b.value&&b.value===b.dataset.oto){ b.value=""; b.dataset.oto=""; }
-    if(ip) ip.hidden=!(b.value&&b.value===b.dataset.oto); }
+    const alis=st.tur==="alis"&&tr>=STK_BAS, sira=alis?seriNo("gider",tr.slice(0,4),seriSon("gider",tr.slice(0,4))+1):"";
+    b.placeholder=alis?sira:"";
+    if(ip){ if(alis&&!b.value){ ip.textContent=`Boş bırakırsanız sıradaki numara verilir: ${sira}`; ip.hidden=false; }
+      else { ip.textContent="STK serisinden sıradaki numara verildi; silebilir veya değiştirebilirsiniz."; ip.hidden=!(b.value&&b.value===b.dataset.oto); } } }
   let upd=function(first){
     const t=st.tur, isCari=CARI_TUR.includes(t);
     let kanalMap=t==="tahsilat"?KANAL_T:t==="odeme"?KANAL_O:null;
@@ -1526,7 +1529,7 @@ function islemForm(opt={}){
     if(!L.length&&opt.inline) return ACT.hgYeniCari(); 
     toast(`${L.length} cari eşleşiyor; listeden seçin.`); });
   $("#i_kat").addEventListener("input",e=>e.target.dataset.el="1");
-  $("#i_belge")?.addEventListener("input",e=>{ const b=e.target; if(b.value==="") b.dataset.sil="1"; else delete b.dataset.sil; const ip=$("#i_belgeOto"); if(ip) ip.hidden=!(b.value&&b.value===b.dataset.oto); });
+  $("#i_belge")?.addEventListener("input",e=>{ const b=e.target; if(b.value==="") b.dataset.sil="1"; else delete b.dataset.sil; belgeOto(); });
   $("#i_tarih")?.addEventListener("change",()=>belgeOto());
   $("#turSeg")?.addEventListener("click",e=>{ const b=e.target.closest("button[data-t]"); if(!b) return; st.tur=b.dataset.t; F.querySelectorAll("#turSeg button").forEach(x=>x.setAttribute("aria-pressed",x===b)); if(!h) $("#i_kur").value=""; upd(true);
     if(h){ const ttl=$(".sheet h2"); if(ttl) ttl.textContent=TUR[st.tur]+" düzenle";
@@ -1564,7 +1567,9 @@ function islemForm(opt={}){
     if(t==="virman"&&fd.hedefHesapId===hesapId) return showErr("Kaynak ve hedef hesap aynı olamaz.");
     let belgeNo=(fd.belgeNo||"").trim();
     if(stkKullan&&t==="satis"&&belgeNo&&belgeNo===$("#i_belge")?.dataset.oto&&tarih>=STK_BAS){ const y=tarih.slice(0,4); belgeNo=seriNo("gelir",y,seriSon("gelir",y)+1); }
+    if(stkKullan&&t==="alis"&&!belgeNo&&tarih>=STK_BAS){ const y=tarih.slice(0,4); belgeNo=seriNo("gider",y,seriSon("gider",y)+1); }
     if(stkKullan&&t==="satis"&&seriMi("gelir",belgeNo)&&S.hareketler.some(x=>x.id!==h?.id&&x.tur==="satis"&&x.belgeNo===belgeNo)) return showErr(`${belgeNo} numarası başka bir satış faturasında kullanılıyor.`);
+    if(stkKullan&&t==="alis"&&seriMi("gider",belgeNo)&&S.hareketler.some(x=>x.id!==h?.id&&x.tur==="alis"&&x.belgeNo===belgeNo)) return showErr(`${belgeNo} numarası başka bir alış faturasında kullanılıyor.`);
     const rec={...(h||{}),id:h?.id||uid("hr"),tur:t,tarih,tutar,doviz:dv,kur:kr,belgeNo,aciklama:fd.aciklama||""};
     if(isCari) rec.cariId=cariId; else delete rec.cariId;
     if(k) rec.kanal=k;
@@ -1596,7 +1601,7 @@ function islemForm(opt={}){
       if(!(await put("cekler",cek.id,{...cek,durum:"ciro",ciroCariId:cariId,ciroTarih:tarih,ciroHareketId:rec.id}))) return;
     }
     if(opt.inline) S.view.hg={tur:t,kanal:k||S.view.hg?.kanal,hesap:hesapId||S.view.hg?.hesap,tarih};
-    if(await put("hareketler",rec.id,rec)){ closeModal(); toast(h?(h.tur!==t?`İşlem türü ${TUR[t]} olarak düzeltildi`:"İşlem güncellendi"):TUR[t]+" kaydedildi"+(opt.inline&&isCari?" · "+cariAd(cariId):"")+(stkKullan&&t==="satis"&&seriMi("gelir",rec.belgeNo)?" · "+rec.belgeNo:"")); }
+    if(await put("hareketler",rec.id,rec)){ closeModal(); toast(h?(h.tur!==t?`İşlem türü ${TUR[t]} olarak düzeltildi`:"İşlem güncellendi"):TUR[t]+" kaydedildi"+(opt.inline&&isCari?" · "+cariAd(cariId):"")+(stkKullan&&((t==="satis"&&seriMi("gelir",rec.belgeNo))||(t==="alis"&&seriMi("gider",rec.belgeNo)))?" · "+rec.belgeNo:"")); }
   });
 }
 function otoHareket(h){
@@ -3240,7 +3245,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.7.8-önizleme";
+const SURUM="1.7.9-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
