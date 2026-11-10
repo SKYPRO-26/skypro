@@ -1585,7 +1585,14 @@ function islemForm(opt={}){
     setTimeout(()=>{ const t=$("#i_tarih"); t?.focus(); },60); }
   // cari önceden belliyse (cari sayfasındaki düğmeler) yeniden cari seçtirmeden tutara geç
   if(!h&&!kop&&st.cari&&S.cariler.get(st.cari)){ const ca=$("#i_cariAra"); if(ca){ const c=S.cariler.get(st.cari); ca.value=`${c.kod} · ${c.unvan}`; }
-    if(!opt.inline) setTimeout(()=>{ const t=$("#i_tutar"); if(t&&!t.closest(".f")?.hidden) t.focus(); },60); }
+    if(!opt.inline){
+      // imleç önce ödeme şekline (yoksa tarihe) gelir; Enter ve liste seçimi sıradaki alana geçirir, son alanda Enter kaydeder
+      const alanlar=()=>[...F.querySelectorAll("input,select,textarea")].filter(x=>!x.closest(".f")?.hidden&&!x.disabled&&x.type!=="hidden"&&x.type!=="checkbox"&&x.offsetParent!==null&&x.id!=="i_cari");
+      const sonraki=el=>{ const L=alanlar(), i=L.indexOf(el); if(i<0) return; if(i===L.length-1){ F.requestSubmit(); return; } const n=L[i+1]; n.focus(); if(n.select&&n.tagName==="INPUT"&&n.type!=="date") n.select(); };
+      setTimeout(()=>{ const k=$("#i_kanal"), ilk=k&&!k.closest(".f")?.hidden&&!k.disabled?k:$("#i_tarih"); ilk?.focus(); },60);
+      F.addEventListener("keydown",e=>{ if(e.key!=="Enter"||e.shiftKey||e.isComposing) return; const el=e.target; if(!el.matches?.("input,select")||el.type==="checkbox") return; e.preventDefault(); sonraki(el); });
+      F.addEventListener("change",e=>{ const el=e.target; if(el.tagName==="SELECT"&&el.id!=="i_cari") setTimeout(()=>sonraki(el),0); });
+    } }
   F.addEventListener("submit",async e=>{
     e.preventDefault();
     const fd=Object.fromEntries(new FormData(F));
@@ -3433,7 +3440,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.8.4-önizleme";
+const SURUM="1.8.5-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
