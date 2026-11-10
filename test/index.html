@@ -1444,10 +1444,10 @@ function islemForm(opt={}){
   const by=h?.by?`<span class="small muted" id="byInfo"></span>`:"<span></span>";
   /* kayıtlı işlemde tür düzeltme: bütün türler arasında (çek/senet bağlantılı ve kilitli kayıtlar hariç) */
   const degisTur=h&&!lock&&!cekLinked&&!["cek","senet","kcek","ksenet","ciro"].includes(h.kanal)&&turSec.includes(h.tur)?turSec:[];
-  islemCiz(opt,h?TUR[h.tur]+" düzenle":kop?TUR[kop.tur]+" · kopya":"Yeni işlem",`<form class="form" id="iForm">
+  islemCiz(opt,h?TUR[h.tur]+" düzenle":kop?TUR[kop.tur]+" · kopya":(st.cari&&!opt.inline&&S.cariler.get(st.cari)?"Yeni işlem · "+S.cariler.get(st.cari).unvan:"Yeni işlem"),`<form class="form" id="iForm">
     ${h?(degisTur.length>1?`<div class="f w"><label>İşlem türü <span class="muted" style="font-weight:400">— yanlış girildiyse düzeltebilirsiniz</span></label><div class="seg" id="turSeg">${degisTur.map(t=>`<button type="button" data-t="${t}" aria-pressed="${st.tur===t}">${TUR[t]}</button>`).join("")}</div>${h.tahakkukId?`<span class="hint">Bu kayıt aylık tahakkukla oluşturuldu; türünü değiştirirseniz tahakkuk ekranında o ay için yeniden "bekliyor" görünebilir.</span>`:""}<span class="hint" id="turUyari" hidden></span></div>`:""):`<div class="f w"><label>İşlem türü</label><div class="seg" id="turSeg">${turSec.map(t=>`<button type="button" data-t="${t}" aria-pressed="${st.tur===t}">${TUR[t]}</button>`).join("")}</div></div>`}
     ${lock?`<div class="notice warn f w">Bu işlem kilitli dönemde (${trDate(S.kilit)}); değiştirilemez.</div>`:""}
-    ${!h&&S.cariler.size?`<div class="f" data-g="cari"><label for="i_cariAra">Cari ara</label><input type="text" id="i_cariAra" list="cariAraList" placeholder="Ünvan, kod veya VKN yazın" autocomplete="off"><datalist id="cariAraList">${sortedCariler().map(c=>`<option value="${esc(c.kod)} · ${esc(c.unvan)}">`).join("")}</datalist>${opt.inline?`<span class="hint" id="i_cariYok" hidden></span>`:""}</div>`:""}
+    ${!h&&S.cariler.size&&!(st.cari&&!opt.inline)?`<div class="f" data-g="cari"><label for="i_cariAra">Cari ara</label><input type="text" id="i_cariAra" list="cariAraList" placeholder="Ünvan, kod veya VKN yazın" autocomplete="off"><datalist id="cariAraList">${sortedCariler().map(c=>`<option value="${esc(c.kod)} · ${esc(c.unvan)}">`).join("")}</datalist>${opt.inline?`<span class="hint" id="i_cariYok" hidden></span>`:""}</div>`:""}
     <div class="f" data-g="cari"><label for="i_cari" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">Cari${opt.inline&&!h?`<a href="#" data-act="hgYeniCari" style="font-weight:600">+ Yeni cari aç</a>`:""}</label><select id="i_cari" name="cariId" ${cekLinked?"disabled":""}><option value="">Seçin…</option>${sortedCariler().map(c=>`<option value="${c.id}" ${st.cari===c.id?"selected":""}>${esc(c.kod)} · ${esc(c.unvan)}${c.doviz!=="TRY"?" ("+c.doviz+")":""}</option>`).join("")}</select></div>
     <div class="f"><label for="i_tarih">Tarih</label><input type="date" id="i_tarih" name="tarih" value="${h?.tarih||opt.tarih||TODAY}" required></div>
     <div class="f" data-g="kanal"><label for="i_kanal">Ödeme şekli</label><select id="i_kanal" name="kanal" ${cekLinked||["cek","senet","kcek","ksenet","ciro"].includes(h?.kanal)?"disabled":""}></select></div>
@@ -1583,6 +1583,9 @@ function islemForm(opt={}){
     if(kop.vade){ const fark=Math.max(0,dayDiff(kop.tarih,kop.vade)), v=$("#i_vade"); v?.addEventListener("input",()=>v.dataset.el="1");
       $("#i_tarih")?.addEventListener("change",e=>{ if(v&&!v.dataset.el&&e.target.value) v.value=addDays(e.target.value,fark); }); }
     setTimeout(()=>{ const t=$("#i_tarih"); t?.focus(); },60); }
+  // cari önceden belliyse (cari sayfasındaki düğmeler) yeniden cari seçtirmeden tutara geç
+  if(!h&&!kop&&st.cari&&S.cariler.get(st.cari)){ const ca=$("#i_cariAra"); if(ca){ const c=S.cariler.get(st.cari); ca.value=`${c.kod} · ${c.unvan}`; }
+    if(!opt.inline) setTimeout(()=>{ const t=$("#i_tutar"); if(t&&!t.closest(".f")?.hidden) t.focus(); },60); }
   F.addEventListener("submit",async e=>{
     e.preventDefault();
     const fd=Object.fromEntries(new FormData(F));
@@ -3430,7 +3433,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.8.3-önizleme";
+const SURUM="1.8.4-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
