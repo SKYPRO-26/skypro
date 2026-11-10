@@ -231,6 +231,9 @@ body.na [data-admin]{display:none!important}
 #etki{display:flex;flex-direction:column;gap:6px}
 #etki .pill{min-width:54px;text-align:center}
 .secTd{width:30px;padding-right:0!important}
+.ef-satir th{background:var(--surface);padding-top:6px!important;padding-bottom:6px!important;vertical-align:middle}
+.ef-satir input,.ef-satir select{font-weight:400;text-transform:none;letter-spacing:0}
+.ef-bilgi th{background:var(--accent-soft)}
 .secTd input{width:16px;height:16px;cursor:pointer;vertical-align:middle}
 tr.secili td{background:var(--accent-soft)!important}
 .secbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:var(--accent-soft);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
@@ -1034,12 +1037,37 @@ function hAciklama(h){
   return s;
 }
 
+/* ekstre sütun filtreleri: metinde "içerir"; tutarda ">1000", "<500", "=3500" veya "3.500" (içerir) */
+function tutarUyar(v,q){ if(!q) return true; const mt=q.match(/^([<>]=?|=)\s*(.+)$/);
+  if(mt){ const n=num(mt[2]); if(!(n>=0)) return true; const x=r2(v||0); return mt[1]===">"?x>n:mt[1]===">="?x>=n:mt[1]==="<"?x<n:mt[1]==="<="?x<=n:Math.abs(x-n)<0.005; }
+  return v?m(v).includes(q):false; }
+function ekstreFiltre(r,F){ const h=r.h, ic=(a,b)=>!b||String(a||"").toLocaleLowerCase("tr").includes(b.toLocaleLowerCase("tr"));
+  if(!ic(trDate(h.tarih),F.tarih)) return false;
+  if(!ic(h.belgeNo,F.belge)) return false;
+  if(F.tur&&h.tur!==F.tur) return false;
+  if(!ic(hAciklama(h),F.ack)) return false;
+  if(F.vade==="var"&&!h.vade) return false; if(F.vade==="yok"&&h.vade) return false; if(F.vade==="gecmis"&&!(h.vade&&h.vade<TODAY)) return false; if(F.vade==="gelecek"&&!(h.vade&&h.vade>=TODAY)) return false;
+  if(F.borc&&!tutarUyar(r.b,F.borc)) return false; if(F.alacak&&!tutarUyar(r.a,F.alacak)) return false; if(F.bakiye&&!tutarUyar(Math.abs(r.bak),F.bakiye)) return false;
+  return true; }
+function ekstreFiltreSatir(F,tum,aktif,n0,n1){
+  const turler=[...new Set(tum.map(r=>r.h.tur))];
+  const st="width:100%;padding:4px 6px;font-size:12px";
+  const inp=(k,ph,w)=>`<input type="search" data-ef="${k}" value="${esc(F[k]||"")}" placeholder="${ph}" style="${st};min-width:${w||60}px" aria-label="${ph}">`;
+  return `<tr class="ef-satir"><th style="width:30px;padding-right:0">${aktif?`<button class="btn sm" data-act="efTemizle" title="Filtreleri temizle" style="padding:2px 6px">✕</button>`:""}</th>
+    <th>${inp("tarih","gg.aa.yyyy",80)}</th><th>${inp("belge","Belge no",80)}</th>
+    <th><select data-ef="tur" style="${st}" aria-label="İşlem türü"><option value="">Tümü</option>${turler.map(t=>`<option value="${t}" ${F.tur===t?"selected":""}>${TUR[t]||t}</option>`).join("")}</select></th>
+    <th>${inp("ack","Açıklamada ara",120)}</th>
+    <th><select data-ef="vade" style="${st}" aria-label="Vade"><option value="">Tümü</option>${[["var","Vadeli"],["gecmis","Vadesi geçmiş"],["gelecek","Vadesi gelmemiş"],["yok","Vadesiz"]].map(([k,v])=>`<option value="${k}" ${F.vade===k?"selected":""}>${v}</option>`).join("")}</select></th>
+    <th>${inp("borc","örn. >1000",80)}</th><th>${inp("alacak","örn. >1000",80)}</th><th>${inp("bakiye","örn. <5000",80)}</th></tr>
+    ${aktif?`<tr class="ef-bilgi"><th colspan="9" class="small" style="text-transform:none;letter-spacing:0;font-weight:400">${n1} / ${n0} kayıt gösteriliyor · Bakiye sütunu tüm hareketlere göre yürüyen bakiyedir · <a href="#" data-act="efTemizle">filtreleri temizle</a></th></tr>`:""}`;
+}
 function vCariDetay(id){
   const c=S.cariler.get(id);
   if(!c) return {title:"Cari bulunamadı",html:`<div class="empty">Bu cari silinmiş olabilir. <a href="#cariler">Cari listesine dön</a></div>`};
   const d=S.D.cari.get(id);
-  const f=S.view.ce?.id===id?S.view.ce:(S.view.ce={id,bas:"",bit:""});
-  const e=ekstreRows(id,f.bas,f.bit);
+  const f=S.view.ce?.id===id?S.view.ce:(S.view.ce={id,bas:"",bit:""}); f.flt=f.flt||{};
+  const e=ekstreRows(id,f.bas,f.bit), tumRows=e.rows, tumSatir=e.rows.length;
+  e.rows=e.rows.filter(r=>ekstreFiltre(r,f.flt)); const fAktif=Object.values(f.flt).some(Boolean);
   const lim=num(c.limit);
   const cekler=[...S.cekler.values()].filter(k=>k.cariId===id||k.ciroCariId===id).sort((a,b)=>(a.vade||"").localeCompare(b.vade||""));
   const html=`<div class="detail">
@@ -1068,16 +1096,21 @@ function vCariDetay(id){
     <label>Başlangıç<input type="date" id="ceb" value="${f.bas}"></label><label>Bitiş<input type="date" id="cet" value="${f.bit}"></label>
     <button class="btn" data-act="ekstreX" data-id="${id}">Excel</button><button class="btn" data-act="ekstreH" data-id="${id}">Yazdırılabilir ekstre</button><button class="btn" data-act="mutabakat" data-id="${id}">Mutabakat mektubu</button>
   </div></header>
-  ${secCubukYer()}<div class="tw"><table><thead><tr>${secTh(e.rows.map(r=>r.h.id))}<th>Tarih</th><th>Belge no</th><th>İşlem</th><th>Açıklama</th><th>Vade</th><th class="r">Borç</th><th class="r">Alacak</th><th class="r">Bakiye</th></tr></thead><tbody>
+  ${secCubukYer()}<div class="tw"><table><thead><tr>${secTh(e.rows.map(r=>r.h.id))}<th>Tarih</th><th>Belge no</th><th>İşlem</th><th>Açıklama</th><th>Vade</th><th class="r">Borç</th><th class="r">Alacak</th><th class="r">Bakiye</th></tr>
+  ${ekstreFiltreSatir(f.flt,tumRows,fAktif,tumSatir,e.rows.length)}</thead><tbody>
   ${f.bas?`<tr><td class="secTd" data-w></td><td class="mono small">${trDate(f.bas)}</td><td></td><td colspan="5" class="muted">Devreden bakiye</td><td class="r">${bal(e.devir,c.doviz)}</td></tr>`:""}
   ${e.rows.map(r=>`<tr class="click${S.sec.has(r.h.id)?" secili":""}" data-act="islemEdit" data-id="${r.h.id}">${secTd(r.h.id)}<td class="mono small">${trDate(r.h.tarih)}</td><td class="small">${esc(r.h.belgeNo||"")}</td><td>${TUR[r.h.tur]}${exTag(r.h)}</td><td class="small muted">${esc(hAciklama(r.h))}</td><td class="mono small">${r.h.vade?trDate(r.h.vade):""}</td><td class="r">${r.b?amt(r.b,c.doviz):""}</td><td class="r">${r.a?amt(r.a,c.doviz):""}</td><td class="r">${bal(r.bak,c.doviz)}</td></tr>`).join("")}
-  ${!e.rows.length?`<tr><td colspan="9" class="empty">Bu aralıkta hareket yok.</td></tr>`:""}
-  </tbody><tfoot><tr><td class="secTd" data-w></td><td colspan="5">Toplam</td><td class="r amt">${m(e.rows.reduce((s,r)=>s+r.b,0))}</td><td class="r amt">${m(e.rows.reduce((s,r)=>s+r.a,0))}</td><td class="r">${bal(e.son,c.doviz)}</td></tr></tfoot></table></div></section>
+  ${!e.rows.length?`<tr><td colspan="9" class="empty">${fAktif?"Filtrelere uyan hareket yok.":"Bu aralıkta hareket yok."}</td></tr>`:""}
+  </tbody><tfoot><tr><td class="secTd" data-w></td><td colspan="5">${fAktif?`Filtrelenen ${e.rows.length} kayıt toplamı`:"Toplam"}</td><td class="r amt">${m(e.rows.reduce((s,r)=>s+r.b,0))}</td><td class="r amt">${m(e.rows.reduce((s,r)=>s+r.a,0))}</td><td class="r">${fAktif?`<span class="small muted" title="Filtrelenen borç − alacak">fark ${bal(r2(e.rows.reduce((s,r)=>s+r.b-r.a,0)),c.doviz)}</span>`:bal(e.son,c.doviz)}</td></tr></tfoot></table></div></section>
   ${cekler.length?`<section class="panel"><header><h2>Bu cariye ait çek ve senetler</h2></header><div class="tw"><table><thead><tr><th>Vade</th><th>Tür</th><th>No</th><th>Banka</th><th class="r">Tutar</th><th>Durum</th></tr></thead><tbody>
   ${cekler.map(k=>`<tr class="click" data-act="cekAct" data-id="${k.id}"><td class="mono small">${trDate(k.vade)}</td><td>${k.tur==="senet"?"Senet":"Çek"} · ${k.yon==="alinan"?"alınan":"verilen"}</td><td class="mono small">${esc(k.no)}</td><td class="small">${esc(k.banka||"")}</td><td class="r">${amt(k.tutar,k.doviz)}</td><td><span class="pill ${CDURUM_CLS[k.durum]}">${CDURUM[k.durum]}</span></td></tr>`).join("")}</tbody></table></div></section>`:""}`;
   return {title:`${esc(c.unvan)}<span class="sub"><a href="#cariler">Cari hesaplar</a> · ${esc(c.kod)}</span>`,
     btns:`<button class="btn" data-act="cariSil" data-id="${id}" data-w>Cariyi sil</button>`,html,
-    after(){ $("#ceb").addEventListener("change",e=>{f.bas=e.target.value;render();}); $("#cet").addEventListener("change",e=>{f.bit=e.target.value;render();}); }};
+    after(){ $("#ceb").addEventListener("change",e=>{f.bas=e.target.value;render();}); $("#cet").addEventListener("change",e=>{f.bit=e.target.value;render();});
+      let t; document.querySelectorAll("[data-ef]").forEach(el=>{ const ev=el.tagName==="SELECT"?"change":"input";
+        el.addEventListener(ev,()=>{ clearTimeout(t); t=setTimeout(()=>{ f.flt[el.dataset.ef]=el.value.trim(); S.sec.clear(); const y=window.scrollY; render(); window.scrollTo(0,y);
+          const n=document.querySelector(`[data-ef="${el.dataset.ef}"]`); if(n&&n.tagName!=="SELECT"){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } },el.tagName==="SELECT"?0:300); });
+        el.addEventListener("click",e=>e.stopPropagation()); }); }};
 }
 
 /* ---------- İŞLEMLER ---------- */
@@ -2504,6 +2537,7 @@ function topluDegistirModal(){
     toast(`${n} kayıt değiştirildi${atla.length?` · ${nedenOzet(atla)}`:""}`);
   });
 }
+Object.assign(ACT,{ efTemizle:()=>{ if(S.view.ce) S.view.ce.flt={}; render(); } });
 Object.assign(ACT,{ topluSil:()=>topluSilModal(), topluDegistir:()=>topluDegistirModal(), secTemizle:()=>{ S.sec.clear(); document.querySelectorAll("[data-sec],[data-secall]").forEach(x=>{ x.checked=false; x.indeterminate=false; x.closest("tr")?.classList.remove("secili"); }); secCubukGuncelle(); } });
 
 /* ---------- yapılacak işler ---------- */
@@ -3206,7 +3240,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.7.7-önizleme";
+const SURUM="1.7.8-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
