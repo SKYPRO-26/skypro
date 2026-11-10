@@ -1316,8 +1316,8 @@ function cariForm(id,opt={}){
   modal(c?"Cariyi düzenle":"Yeni cari kartı",`<form class="form" id="cForm">
     <div class="f"><label for="c_kod">Cari kodu</label><input type="text" id="c_kod" name="kod" value="${esc(kod)}" required>${c?"":`<span class="hint">Müşteri M, satıcı S ile başlar; tip seçince kendiliğinden gelir.</span>`}</div>
     <div class="f"><label for="c_tip">Tip</label><select id="c_tip" name="tip">${Object.entries(CTIP).map(([k,v])=>`<option value="${k}" ${(c?.tip||opt.tip||"musteri")===k?"selected":""}>${v}</option>`).join("")}</select></div>
-    <div class="f w"><label for="c_unvan">Ünvan / ad soyad</label><input type="text" id="c_unvan" name="unvan" value="${esc(c?.unvan||"")}" required></div>
-    <div class="f"><label for="c_vkn">VKN / TCKN</label><input type="text" id="c_vkn" name="vkn" value="${esc(c?.vkn||"")}" inputmode="numeric"></div>
+    <div class="f w"><label for="c_unvan">Ünvan / ad soyad</label><input type="text" id="c_unvan" name="unvan" value="${esc(c?.unvan||opt.unvan||"")}" required></div>
+    <div class="f"><label for="c_vkn">VKN / TCKN</label><input type="text" id="c_vkn" name="vkn" value="${esc(c?.vkn||opt.vkn||"")}" inputmode="numeric"></div>
     <div class="f"><label for="c_vd">Vergi dairesi</label><input type="text" id="c_vd" name="vd" value="${esc(c?.vd||"")}"></div>
     <div class="f"><label for="c_doviz">Para birimi</label><select id="c_doviz" name="doviz" ${hasH?"disabled":""}>${DOVIZ.map(d=>`<option ${(c?.doviz||"TRY")===d?"selected":""}>${d}</option>`).join("")}</select>${hasH?`<span class="hint">Hareketi olan caride değiştirilemez</span>`:""}</div>
     <div class="f"><label for="c_lim">Risk limiti</label><input type="text" id="c_lim" name="limit" inputmode="decimal" value="${c?.limit?m(c.limit):""}" placeholder="Boş: limit yok"></div>
@@ -1394,8 +1394,8 @@ function islemForm(opt={}){
   islemCiz(opt,h?TUR[h.tur]+" düzenle":"Yeni işlem",`<form class="form" id="iForm">
     ${h?"":`<div class="f w"><label>İşlem türü</label><div class="seg" id="turSeg">${turSec.map(t=>`<button type="button" data-t="${t}" aria-pressed="${st.tur===t}">${TUR[t]}</button>`).join("")}</div></div>`}
     ${lock?`<div class="notice warn f w">Bu işlem kilitli dönemde (${trDate(S.kilit)}); değiştirilemez.</div>`:""}
-    ${!h&&S.cariler.size?`<div class="f" data-g="cari"><label for="i_cariAra">Cari ara</label><input type="text" id="i_cariAra" list="cariAraList" placeholder="Ünvan, kod veya VKN yazın" autocomplete="off"><datalist id="cariAraList">${sortedCariler().map(c=>`<option value="${esc(c.kod)} · ${esc(c.unvan)}">`).join("")}</datalist></div>`:""}
-    <div class="f" data-g="cari"><label for="i_cari">Cari</label><select id="i_cari" name="cariId" ${cekLinked?"disabled":""}><option value="">Seçin…</option>${sortedCariler().map(c=>`<option value="${c.id}" ${st.cari===c.id?"selected":""}>${esc(c.kod)} · ${esc(c.unvan)}${c.doviz!=="TRY"?" ("+c.doviz+")":""}</option>`).join("")}</select></div>
+    ${!h&&S.cariler.size?`<div class="f" data-g="cari"><label for="i_cariAra">Cari ara</label><input type="text" id="i_cariAra" list="cariAraList" placeholder="Ünvan, kod veya VKN yazın" autocomplete="off"><datalist id="cariAraList">${sortedCariler().map(c=>`<option value="${esc(c.kod)} · ${esc(c.unvan)}">`).join("")}</datalist>${opt.inline?`<span class="hint" id="i_cariYok" hidden></span>`:""}</div>`:""}
+    <div class="f" data-g="cari"><label for="i_cari" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">Cari${opt.inline&&!h?`<a href="#" data-act="hgYeniCari" style="font-weight:600">+ Yeni cari aç</a>`:""}</label><select id="i_cari" name="cariId" ${cekLinked?"disabled":""}><option value="">Seçin…</option>${sortedCariler().map(c=>`<option value="${c.id}" ${st.cari===c.id?"selected":""}>${esc(c.kod)} · ${esc(c.unvan)}${c.doviz!=="TRY"?" ("+c.doviz+")":""}</option>`).join("")}</select></div>
     <div class="f"><label for="i_tarih">Tarih</label><input type="date" id="i_tarih" name="tarih" value="${h?.tarih||opt.tarih||TODAY}" required></div>
     <div class="f" data-g="kanal"><label for="i_kanal">Ödeme şekli</label><select id="i_kanal" name="kanal" ${h?"disabled":""}></select></div>
     <div class="f" data-g="hesap"><label for="i_hesap" id="l_hesap">Hesap</label><select id="i_hesap" name="hesapId" ${cekLinked?"disabled":""}></select></div>
@@ -1470,8 +1470,16 @@ function islemForm(opt={}){
   const etki=()=>{ if(!h) etkiHesapla(st,F,doviz); };
   const _upd=upd; upd=(...a)=>{ _upd(...a); etki(); }; etki();
   ["#i_tutar","#i_ht"].forEach(q=>$(q)?.addEventListener("input",etki));
+  const cariBul=v=>{ const q=v.toLocaleLowerCase("tr"), sade=v.replace(/\s/g,""); return sortedCariler().filter(c=>c.kod.toLocaleLowerCase("tr")===q||c.unvan.toLocaleLowerCase("tr").includes(q)||c.kod.toLocaleLowerCase("tr").startsWith(q)||(sade.length>=3&&/^\d+$/.test(sade)&&String(c.vkn||"").includes(sade))); };
   $("#i_cariAra")?.addEventListener("input",e=>{ const v=e.target.value.trim(); const c=sortedCariler().find(c=>`${c.kod} · ${c.unvan}`===v);
+    const yok=$("#i_cariYok"); if(yok){ const bos=v.length>=2&&!c&&!cariBul(v).length; yok.hidden=!bos; if(bos) yok.innerHTML=`"${esc(v)}" bulunamadı. <a href="#" data-act="hgYeniCari"><b>Yeni cari olarak aç</b></a> (Enter)`; }
     if(c){ $("#i_cari").value=c.id; st.cari=c.id; $("#i_kur").value=""; upd(); $("#i_tarih").focus(); } });
+  $("#i_cariAra")?.addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return;
+    if(sortedCariler().some(c=>`${c.kod} · ${c.unvan}`===v)) return;
+    const L=cariBul(v); e.preventDefault(); e.stopPropagation();
+    if(L.length===1){ e.target.value=`${L[0].kod} · ${L[0].unvan}`; e.target.dispatchEvent(new Event("input",{bubbles:true})); return; }
+    if(!L.length&&opt.inline) return ACT.hgYeniCari(); 
+    toast(`${L.length} cari eşleşiyor; listeden seçin.`); });
   $("#i_kat").addEventListener("input",e=>e.target.dataset.el="1");
   $("#turSeg")?.addEventListener("click",e=>{ const b=e.target.closest("button[data-t]"); if(!b) return; st.tur=b.dataset.t; F.querySelectorAll("#turSeg button").forEach(x=>x.setAttribute("aria-pressed",x===b)); $("#i_kur").value=""; upd(true); });
   $("#i_kanal").addEventListener("change",e=>{ st.kanal=e.target.value; upd(); });
@@ -2904,17 +2912,30 @@ function vHizli(){
       :`<div class="empty">Henüz kayıt girilmedi. Soldaki ekrandan ilk kaydı girin.</div>`}
     </section></div>
   </div>`;
-  return {title:"Hızlı kayıt",btns:`<button class="btn" data-act="cariForm" data-w>+ Yeni cari</button>`,html,after(){
+  return {title:"Hızlı kayıt",btns:`<button class="btn" data-act="hgYeniCari" data-w>+ Yeni cari</button>`,html,after(){
     if(!S.canWrite) return;
     const v=S.view.hg||(S.view.hg={});
     islemForm({inline:"#hgForm",tur:v.tur||"tahsilat",kanal:v.kanal,hesap:v.hesap,tarih:v.tarih,cari:v.cari});
+    const geriDon=!!(v.cari&&v.geri);
+    if(geriDon){ for(const [id,val] of Object.entries(v.geri)){ const el=document.getElementById(id); if(!el||["i_cari","i_cariAra","i_kur","i_kanal","i_hesap","i_tarih"].includes(id)) continue; if(el.type==="checkbox") el.checked=val; else el.value=val; if(id==="i_kat"&&val) el.dataset.el="1"; }
+      $("#i_tutar")?.dispatchEvent(new Event("input",{bubbles:true})); delete v.geri; }
     v.cari="";
     const ek=()=>setTimeout(hgEkstreCiz,0); $("#hgForm").addEventListener("input",ek); $("#hgForm").addEventListener("change",ek); $("#hgForm").addEventListener("click",ek); hgEkstreCiz();
-    const odak=()=>{ const a=$("#i_cariAra"); const g=a?.closest(".f"); (g&&!g.hidden?a:$("#i_tutar"))?.focus({preventScroll:true}); };
+    const odak=()=>{ if(geriDon){ const t=$("#i_tutar"); if(t&&!t.value) return t.focus({preventScroll:true}); return $("#hgForm button[type=submit]")?.focus({preventScroll:true}); } const a=$("#i_cariAra"); const g=a?.closest(".f"); (g&&!g.hidden?a:$("#i_tutar"))?.focus({preventScroll:true}); };
     requestAnimationFrame(()=>requestAnimationFrame(odak)); setTimeout(odak,150);
   }};
 }
-Object.assign(ACT,{ hgTemizle:()=>{ S.view.hg={tarih:S.view.hg?.tarih}; render(); } });
+Object.assign(ACT,{ hgTemizle:()=>{ S.view.hg={tarih:S.view.hg?.tarih}; render(); },
+  /* hızlı kayıtta yeni cari: formdaki bilgiler saklanır, cari açılınca seçili olarak forma dönülür */
+  hgYeniCari:()=>{ if(!S.canWrite) return; const F=$("#iForm"), v=S.view.hg||(S.view.hg={});
+    let unvan="", vkn="", tur="tahsilat";
+    if(F){ const geri={}; F.querySelectorAll("input[id],select[id],textarea[id]").forEach(e=>{ geri[e.id]=e.type==="checkbox"?e.checked:e.value; });
+      tur=F.querySelector("#turSeg button[aria-pressed=true]")?.dataset.t||v.tur||"tahsilat";
+      Object.assign(v,{geri,tur,kanal:$("#i_kanal")?.value||v.kanal,hesap:$("#i_hesap")?.value||v.hesap,tarih:$("#i_tarih")?.value||v.tarih});
+      const q=($("#i_cariAra")?.value||"").trim(); if(q&&!q.includes(" · ")){ if(/^\d{10,11}$/.test(q.replace(/\s/g,""))) vkn=q.replace(/\s/g,""); else unvan=q; } }
+    const tip=["alis","odeme","alacak_dekont"].includes(tur)?"tedarikci":"musteri";
+    cariForm(null,{tip,unvan,vkn,sonra:nid=>setTimeout(()=>{ const w=S.view.hg||(S.view.hg={}); w.cari=nid; if(route()!=="hizli-giris") location.hash="#hizli-giris"; else render(); },30)});
+    setTimeout(()=>$(unvan?"#c_vkn":"#c_unvan")?.focus(),50); } });
 
 /* ---------- gelir ve gider türleri yönetimi ---------- */
 function turVeri(){ const t=S.data.turler||(S.data.turler={gelir:[],gider:[],gizli:[]}); t.gelir=t.gelir||[]; t.gider=t.gider||[]; t.gizli=t.gizli||[]; return t; }
@@ -3121,7 +3142,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.7.2-önizleme";
+const SURUM="1.7.3-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
