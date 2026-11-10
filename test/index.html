@@ -1434,7 +1434,8 @@ function islemForm(opt={}){
   if(opt.id&&!h) return;
   if(h && ["cek_tahsil","cek_odeme","cek_karsiliksiz"].includes(h.tur)) return otoHareket(h);
   if(!S.cariler.size && !S.hesaplar.size){ toast("Önce bir cari veya hesap açın."); return; }
-  const st={tur:h?.tur||opt.tur||"tahsilat", kanal:h?.kanal||opt.kanal||"banka", cari:h?.cariId||opt.cari||"", hesap:h?.hesapId||opt.hesap||"", ciroCek:opt.ciroCek||""};
+  const kop=!h&&opt.kopya?S.hareketler.find(x=>x.id===opt.kopya):null; // kayıt kopyalama: bilgiler bu kayıttan gelir
+  const st={tur:h?.tur||kop?.tur||opt.tur||"tahsilat", kanal:h?.kanal||kop?.kanal||opt.kanal||"banka", cari:h?.cariId||kop?.cariId||opt.cari||"", hesap:h?.hesapId||kop?.hesapId||opt.hesap||"", ciroCek:opt.ciroCek||""};
   if(st.tur==="odeme"&&opt.ciroCek) st.kanal="ciro";
   const lock=h&&kilitli(h.tarih);
   const cekLinked=!!h?.cekId;
@@ -1443,7 +1444,7 @@ function islemForm(opt={}){
   const by=h?.by?`<span class="small muted" id="byInfo"></span>`:"<span></span>";
   /* kayıtlı işlemde tür düzeltme: bütün türler arasında (çek/senet bağlantılı ve kilitli kayıtlar hariç) */
   const degisTur=h&&!lock&&!cekLinked&&!["cek","senet","kcek","ksenet","ciro"].includes(h.kanal)&&turSec.includes(h.tur)?turSec:[];
-  islemCiz(opt,h?TUR[h.tur]+" düzenle":"Yeni işlem",`<form class="form" id="iForm">
+  islemCiz(opt,h?TUR[h.tur]+" düzenle":kop?TUR[kop.tur]+" · kopya":"Yeni işlem",`<form class="form" id="iForm">
     ${h?(degisTur.length>1?`<div class="f w"><label>İşlem türü <span class="muted" style="font-weight:400">— yanlış girildiyse düzeltebilirsiniz</span></label><div class="seg" id="turSeg">${degisTur.map(t=>`<button type="button" data-t="${t}" aria-pressed="${st.tur===t}">${TUR[t]}</button>`).join("")}</div>${h.tahakkukId?`<span class="hint">Bu kayıt aylık tahakkukla oluşturuldu; türünü değiştirirseniz tahakkuk ekranında o ay için yeniden "bekliyor" görünebilir.</span>`:""}<span class="hint" id="turUyari" hidden></span></div>`:""):`<div class="f w"><label>İşlem türü</label><div class="seg" id="turSeg">${turSec.map(t=>`<button type="button" data-t="${t}" aria-pressed="${st.tur===t}">${TUR[t]}</button>`).join("")}</div></div>`}
     ${lock?`<div class="notice warn f w">Bu işlem kilitli dönemde (${trDate(S.kilit)}); değiştirilemez.</div>`:""}
     ${!h&&S.cariler.size?`<div class="f" data-g="cari"><label for="i_cariAra">Cari ara</label><input type="text" id="i_cariAra" list="cariAraList" placeholder="Ünvan, kod veya VKN yazın" autocomplete="off"><datalist id="cariAraList">${sortedCariler().map(c=>`<option value="${esc(c.kod)} · ${esc(c.unvan)}">`).join("")}</datalist>${opt.inline?`<span class="hint" id="i_cariYok" hidden></span>`:""}</div>`:""}
@@ -1468,7 +1469,7 @@ function islemForm(opt={}){
     <div class="f w"><label for="i_ack">Açıklama</label><input type="text" id="i_ack" name="aciklama" value="${esc(h?.aciklama||"")}"></div>
     ${!h?`<div class="f w" id="etkiYer"></div>`:""}
     <p class="err" id="mErr" hidden></p></form>`,
-    `${h&&!lock?`<button class="btn danger" data-act="islemSil" data-id="${h.id}" data-w>Sil</button>`:by}${h&&!lock?by:""}<div class="btns"><button class="btn" data-act="close">${lock?"Kapat":"Vazgeç"}</button>${lock?"":`<button class="btn pri" type="submit" form="iForm" data-w>Kaydet</button>`}</div>`);
+    `${h&&!lock?`<button class="btn danger" data-act="islemSil" data-id="${h.id}" data-w>Sil</button>`:by}${h&&!lock?by:""}<div class="btns">${h&&!cekLinked&&!["cek","senet","kcek","ksenet","ciro"].includes(h.kanal)&&turSec.includes(h.tur)?`<button class="btn" data-act="islemKopya" data-id="${h.id}" data-w title="Bu kaydın bilgileriyle yeni bir kayıt aç">Kopyala</button>`:""}<button class="btn" data-act="close">${lock?"Kapat":"Vazgeç"}</button>${lock?"":`<button class="btn pri" type="submit" form="iForm" data-w>Kaydet</button>`}</div>`);
   if(h?.by){ const el=$("#byInfo"); if(el) el.textContent="Kaydeden: "+h.by+" · "+(h.at?trDate(h.at.slice(0,10)):""); }
   const F=$("#iForm");
   if(!h && !opt.inline) $("#etkiYer").innerHTML=`<div class="notice small" id="etki"></div>`;
@@ -1569,6 +1570,19 @@ function islemForm(opt={}){
   $("#i_hesap").addEventListener("change",()=>{ if(!CARI_TUR.includes(st.tur)) $("#i_kur").value=""; upd(); });
   $("#i_hedef").addEventListener("change",()=>upd());
   $("#i_ciro").addEventListener("change",e=>{ st.ciroCek=e.target.value; upd(); });
+  if(kop){ const set=(id,v)=>{ const el=$("#"+id); if(el&&v!=null) el.value=v; };
+    set("i_tarih",TODAY); set("i_tutar",m(kop.tutar)); set("i_ack",kop.aciklama||"");
+    if(kop.kategori){ set("i_kat",kop.kategori); $("#i_kat").dataset.el="1"; }
+    if(kop.kdv!=null) set("i_kdv",String(kop.kdv));
+    set("i_vade",kop.vade?addDays(TODAY,Math.max(0,dayDiff(kop.tarih,kop.vade))):"");
+    if(kop.hedefHesapId) set("i_hedef",kop.hedefHesapId);
+    if(kop.hesapTutar||kop.hedefTutar) set("i_ht",m(kop.hesapTutar||kop.hedefTutar));
+    if(kop.doviz&&kop.doviz!=="TRY"&&kop.kur) set("i_kur",String(kop.kur).replace(".",","));
+    set("i_belge",""); upd(); $("#i_tutar")?.dispatchEvent(new Event("input",{bubbles:true}));
+    F.insertAdjacentHTML("afterbegin",`<div class="notice small f w" style="margin:0">${trDate(kop.tarih)} tarihli ${esc(TUR[kop.tur])} kaydının bilgileri getirildi${kop.cariId?` (${esc(cariAd(kop.cariId))})`:""}. Tarih bugün olarak geldi; tarihi, tutarı ve açıklamayı kontrol edip kaydedin.</div>`);
+    if(kop.vade){ const fark=Math.max(0,dayDiff(kop.tarih,kop.vade)), v=$("#i_vade"); v?.addEventListener("input",()=>v.dataset.el="1");
+      $("#i_tarih")?.addEventListener("change",e=>{ if(v&&!v.dataset.el&&e.target.value) v.value=addDays(e.target.value,fark); }); }
+    setTimeout(()=>{ const t=$("#i_tarih"); t?.focus(); },60); }
   F.addEventListener("submit",async e=>{
     e.preventDefault();
     const fd=Object.fromEntries(new FormData(F));
@@ -2458,7 +2472,7 @@ function secCubukGuncelle(){
   const L=seciliKayitlar(); if(!L.length){ el.hidden=true; el.innerHTML=""; return; }
   let b=0,a=0; for(const h of L){ b+=cariBorc(h)*(h.kur||1); a+=cariAlacak(h)*(h.kur||1); }
   el.hidden=false;
-  el.innerHTML=`<b>${L.length} kayıt seçildi</b><span class="small">${b?`Borç <span class="amt">${m(b)}</span>`:""}${b&&a?" · ":""}${a?`Alacak <span class="amt">${m(a)}</span>`:""}</span><span style="flex:1"></span><div class="btns"><button class="btn sm" data-act="topluDegistir">Değiştir</button>${modulAcik("tahakkuk")?`<button class="btn sm" data-act="stkSecili">STK belge no ver</button>`:""}<button class="btn sm danger" data-act="topluSil">Sil</button><button class="btn sm" data-act="secTemizle">Seçimi kaldır</button></div>`;
+  el.innerHTML=`<b>${L.length} kayıt seçildi</b><span class="small">${b?`Borç <span class="amt">${m(b)}</span>`:""}${b&&a?" · ":""}${a?`Alacak <span class="amt">${m(a)}</span>`:""}</span><span style="flex:1"></span><div class="btns"><button class="btn sm" data-act="topluDegistir">Değiştir</button><button class="btn sm" data-act="topluKopya" title="Seçilen kayıtları yeni tarihle kopyala">Kopyala</button>${modulAcik("tahakkuk")?`<button class="btn sm" data-act="stkSecili">STK belge no ver</button>`:""}<button class="btn sm danger" data-act="topluSil">Sil</button><button class="btn sm" data-act="secTemizle">Seçimi kaldır</button></div>`;
   document.querySelectorAll("[data-secall]").forEach(x=>{ const ids=x.dataset.secall?x.dataset.secall.split(","):[]; x.checked=ids.length&&ids.every(i=>S.sec.has(i)); x.indeterminate=!x.checked&&ids.some(i=>S.sec.has(i)); });
 }
 document.addEventListener("change",e=>{
@@ -2521,6 +2535,35 @@ function turCevir(h,yeni,cari,hes){
   delete h.hedefHesapId; delete h.hedefTutar;
   return null;
 }
+/* seçilen kayıtları yeni tarihle kopyalar; vadeler aynı gün farkıyla kayar, belge numarası yeniden verilir */
+const KOPYA_ALAN=["tur","cariId","hesapId","hedefHesapId","kanal","tutar","doviz","kur","aciklama","kategori","kdv","hesapTutar","hedefTutar"];
+function topluKopyaModal(){
+  const L=seciliKayitlar(); if(!L.length) return;
+  const ok=L.filter(h=>!h.cekId&&!["cek","senet","kcek","ksenet","ciro"].includes(h.kanal)&&BN_SERI[h.tur]&&!OTO_CEK.includes(h.tur)), atla=L.length-ok.length;
+  const ilk=[...ok].sort((a,b)=>a.tarih.localeCompare(b.tarih))[0];
+  modal(`${ok.length} kaydı kopyala`,`<form class="form" id="tkpForm">
+    <p class="hint f w" style="margin:0">Seçilen kayıtlar aynı bilgilerle yeni kayıt olarak eklenir. Belge numaraları yeniden verilir.</p>
+    <div class="f"><label for="kp_tarih">Yeni tarih</label><input type="date" id="kp_tarih" value="${TODAY}" required></div>
+    <div class="f"><label for="kp_yon">Tarih nasıl verilsin?</label><select id="kp_yon"><option value="ayni">Hepsine bu tarih</option><option value="kay" ${ok.length>1?"selected":""}>İlk kayıt bu tarihe, diğerleri aynı aralıkla kaysın</option></select></div>
+    <label class="f w" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="kp_vade" checked> Vadeleri de aynı gün farkıyla kaydır</label>
+    ${atla?`<div class="notice warn small f w">${atla} kayıt (çek/senede bağlı ya da otomatik oluşmuş) kopyalanmayacak.</div>`:""}
+    <p class="err" id="mErr" hidden></p></form>`,
+    `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button>${ok.length?`<button class="btn pri" type="submit" form="tkpForm">${ok.length} kaydı kopyala</button>`:""}</div>`);
+  $("#tkpForm")?.addEventListener("submit",e=>{ e.preventDefault();
+    const t0=$("#kp_tarih").value, kay=$("#kp_yon").value==="kay", vk=$("#kp_vade").checked;
+    if(!t0) return showErr("Tarih seçin.");
+    const yeniT=h=>kay?addDays(t0,dayDiff(ilk.tarih,h.tarih)):t0;
+    if(ok.some(h=>kilitli(yeniT(h)))) return showErr(`${trDate(S.kilit)} ve öncesi kilitli; bu tarihe kayıt eklenemez.`);
+    const st=stamp(), stkVar=modulAcik("tahakkuk"), stkSira={}; let n=0;
+    for(const h of [...ok].sort((a,b)=>a.tarih.localeCompare(b.tarih))){
+      const yt=yeniT(h), id=uid("hr"), r={id,tarih:yt,belgeNo:"",...st};
+      for(const k of KOPYA_ALAN) if(h[k]!=null&&h[k]!=="") r[k]=h[k];
+      if(h.vade) r.vade=vk?addDays(yt,dayDiff(h.tarih,h.vade)):h.vade;
+      if(stkVar&&r.tur==="satis"&&yt>=STK_BAS){ const y=yt.slice(0,4); stkSira[y]=(stkSira[y]??seriSon("gelir",y))+1; r.belgeNo=seriNo("gelir",y,stkSira[y]); }
+      else bnTamamla(r);
+      S.data.hareketler[id]=r; n++; }
+    S.sec.clear(); closeModal(); changed(); toast(`${n} kayıt kopyalandı`); });
+}
 function topluDegistirModal(){
   const L=seciliKayitlar(); if(!L.length) return;
   const cariVar=true, turVar=true, hesVar=true;
@@ -2570,6 +2613,7 @@ Object.assign(ACT,{ bnAta:el=>{ const L=bnEksikler(), ac=L.filter(h=>!kilitli(h.
     for(const h of ac) bnTamamla(S.data.hareketler[h.id]);
     changed(); toast(`${ac.length} kayda belge numarası verildi${kil?` · ${kil} kayıt kilitli dönemde olduğu için atlandı`:""}`); } });
 Object.assign(ACT,{ efTemizle:()=>{ if(S.view.ce) S.view.ce.flt={}; render(); } });
+Object.assign(ACT,{ islemKopya:el=>{ closeModal(); islemForm({kopya:el.dataset.id}); }, topluKopya:()=>topluKopyaModal() });
 Object.assign(ACT,{ topluSil:()=>topluSilModal(), topluDegistir:()=>topluDegistirModal(), secTemizle:()=>{ S.sec.clear(); document.querySelectorAll("[data-sec],[data-secall]").forEach(x=>{ x.checked=false; x.indeterminate=false; x.closest("tr")?.classList.remove("secili"); }); secCubukGuncelle(); } });
 
 /* ---------- yapılacak işler ---------- */
@@ -3386,7 +3430,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.8.2-önizleme";
+const SURUM="1.8.3-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
