@@ -1415,7 +1415,7 @@ function islemForm(opt={}){
     <div class="f" data-g="ht"><label for="i_ht" id="l_ht">Hesaba geçen tutar</label><input type="text" id="i_ht" name="hesapTutar" inputmode="decimal" value="${h?.hesapTutar!=null&&h.hesapTutar!==h.tutar?m(h.hesapTutar):(h?.hedefTutar!=null?m(h.hedefTutar):"")}"></div>
     <div class="f" data-g="kat"><label for="i_kat" id="l_kat">Kategori</label><input type="text" id="i_kat" name="kategori" list="katList" value="${esc(h?.kategori||"")}">${kat}<datalist id="gelirList">${turListe("gelir").map(t=>`<option value="${esc(t)}">`).join("")}</datalist><datalist id="giderList">${turListe("gider").map(t=>`<option value="${esc(t)}">`).join("")}</datalist></div>
     <div class="f" data-g="kdv"><label for="i_kdv">KDV oranı (tutar KDV dahil)</label><select id="i_kdv" name="kdv">${[["20","%20"],["10","%10"],["1","%1"],["0","%0 (istisna / ihracat)"],["","Belirtilmedi"]].map(([v,t])=>`<option value="${v}" ${(h?(h.kdv>=0?String(h.kdv):""):"20")===v?"selected":""}>${t}</option>`).join("")}</select></div>
-    <div class="f" data-g="belge"><label for="i_belge">Belge no</label><input type="text" id="i_belge" name="belgeNo" value="${esc(h?.belgeNo||"")}"></div>
+    <div class="f" data-g="belge"><label for="i_belge">Belge no</label><input type="text" id="i_belge" name="belgeNo" value="${esc(h?.belgeNo||"")}"><span class="hint" id="i_belgeOto" hidden>STK serisinden sıradaki numara verildi; silebilir veya değiştirebilirsiniz.</span></div>
     <div class="f w"><label for="i_ack">Açıklama</label><input type="text" id="i_ack" name="aciklama" value="${esc(h?.aciklama||"")}"></div>
     ${!h?`<div class="f w" id="etkiYer"></div>`:""}
     <p class="err" id="mErr" hidden></p></form>`,
@@ -1428,6 +1428,14 @@ function islemForm(opt={}){
     if(CARI_TUR.includes(st.tur)) return S.cariler.get(st.cari)?.doviz||"TRY";
     return S.hesaplar.get(F.i_hesap?.value||$("#i_hesap").value)?.doviz||"TRY";
   }
+  /* elle girilen satış faturasına STK serisinden sıradaki numara (yalnızca STK serisi kullanan firmada, yeni kayıtta) */
+  const stkKullan=!h&&modulAcik("tahakkuk");
+  function belgeOto(){ if(!stkKullan) return; const b=$("#i_belge"), ip=$("#i_belgeOto"); if(!b) return;
+    const tr=$("#i_tarih")?.value||TODAY, olmali=st.tur==="satis"&&tr>=STK_BAS;
+    const elle=b.value!==""&&b.value!==b.dataset.oto;
+    if(olmali&&!b.dataset.sil&&!elle){ const y=tr.slice(0,4), no=seriNo("gelir",y,seriSon("gelir",y)+1); b.value=no; b.dataset.oto=no; }
+    else if(!olmali&&b.value&&b.value===b.dataset.oto){ b.value=""; b.dataset.oto=""; }
+    if(ip) ip.hidden=!(b.value&&b.value===b.dataset.oto); }
   let upd=function(first){
     const t=st.tur, isCari=CARI_TUR.includes(t);
     let kanalMap=t==="tahsilat"?KANAL_T:t==="odeme"?KANAL_O:null;
@@ -1469,6 +1477,7 @@ function islemForm(opt={}){
     if(t==="virman"){ const hd=S.hesaplar.get($("#i_hedef").value)?.doviz; ht=hd&&hd!==dv; $("#l_ht").textContent="Hedef hesaba geçen tutar ("+(hd||"")+")"; }
     show("ht",!!ht);
     if(first && !h && ["satis","alis"].includes(t) && !$("#i_vade").value) $("#i_vade").value=addDays($("#i_tarih").value||TODAY,30);
+    belgeOto();
   }
   upd(true);
   const etki=()=>{ if(!h) etkiHesapla(st,F,doviz); };
@@ -1485,6 +1494,8 @@ function islemForm(opt={}){
     if(!L.length&&opt.inline) return ACT.hgYeniCari(); 
     toast(`${L.length} cari eşleşiyor; listeden seçin.`); });
   $("#i_kat").addEventListener("input",e=>e.target.dataset.el="1");
+  $("#i_belge")?.addEventListener("input",e=>{ const b=e.target; if(b.value==="") b.dataset.sil="1"; else delete b.dataset.sil; const ip=$("#i_belgeOto"); if(ip) ip.hidden=!(b.value&&b.value===b.dataset.oto); });
+  $("#i_tarih")?.addEventListener("change",()=>belgeOto());
   $("#turSeg")?.addEventListener("click",e=>{ const b=e.target.closest("button[data-t]"); if(!b) return; st.tur=b.dataset.t; F.querySelectorAll("#turSeg button").forEach(x=>x.setAttribute("aria-pressed",x===b)); if(!h) $("#i_kur").value=""; upd(true);
     if(h){ const ttl=$(".sheet h2"); if(ttl) ttl.textContent=TUR[st.tur]+" düzenle";
       const u=$("#turUyari"); if(u){ const yon=t=>BORC.has(t)?"borç":ALACAK.has(t)?"alacak":"", d=st.tur!==h.tur;
@@ -1512,7 +1523,10 @@ function islemForm(opt={}){
     const kr=dv==="TRY"?1:num(fd.kur);
     if(!(kr>0)) return showErr("Döviz işlemleri için kur girin.");
     if(t==="virman"&&fd.hedefHesapId===hesapId) return showErr("Kaynak ve hedef hesap aynı olamaz.");
-    const rec={...(h||{}),id:h?.id||uid("hr"),tur:t,tarih,tutar,doviz:dv,kur:kr,belgeNo:fd.belgeNo||"",aciklama:fd.aciklama||""};
+    let belgeNo=(fd.belgeNo||"").trim();
+    if(stkKullan&&t==="satis"&&belgeNo&&belgeNo===$("#i_belge")?.dataset.oto&&tarih>=STK_BAS){ const y=tarih.slice(0,4); belgeNo=seriNo("gelir",y,seriSon("gelir",y)+1); }
+    if(stkKullan&&t==="satis"&&seriMi("gelir",belgeNo)&&S.hareketler.some(x=>x.id!==h?.id&&x.tur==="satis"&&x.belgeNo===belgeNo)) return showErr(`${belgeNo} numarası başka bir satış faturasında kullanılıyor.`);
+    const rec={...(h||{}),id:h?.id||uid("hr"),tur:t,tarih,tutar,doviz:dv,kur:kr,belgeNo,aciklama:fd.aciklama||""};
     if(isCari) rec.cariId=cariId; else delete rec.cariId;
     if(k) rec.kanal=k;
     if(hesapId) rec.hesapId=hesapId; else delete rec.hesapId;
@@ -1543,7 +1557,7 @@ function islemForm(opt={}){
       if(!(await put("cekler",cek.id,{...cek,durum:"ciro",ciroCariId:cariId,ciroTarih:tarih,ciroHareketId:rec.id}))) return;
     }
     if(opt.inline) S.view.hg={tur:t,kanal:k||S.view.hg?.kanal,hesap:hesapId||S.view.hg?.hesap,tarih};
-    if(await put("hareketler",rec.id,rec)){ closeModal(); toast(h?(h.tur!==t?`İşlem türü ${TUR[t]} olarak düzeltildi`:"İşlem güncellendi"):TUR[t]+" kaydedildi"+(opt.inline&&isCari?" · "+cariAd(cariId):"")); }
+    if(await put("hareketler",rec.id,rec)){ closeModal(); toast(h?(h.tur!==t?`İşlem türü ${TUR[t]} olarak düzeltildi`:"İşlem güncellendi"):TUR[t]+" kaydedildi"+(opt.inline&&isCari?" · "+cariAd(cariId):"")+(stkKullan&&t==="satis"&&seriMi("gelir",rec.belgeNo)?" · "+rec.belgeNo:"")); }
   });
 }
 function otoHareket(h){
@@ -3157,7 +3171,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.7.5-önizleme";
+const SURUM="1.7.6-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
