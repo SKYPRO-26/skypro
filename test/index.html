@@ -438,7 +438,18 @@ function syncFromData(){
   S.hareketler=Object.values(d.hareketler); S.ayar=d.ayar||{}; S.kilit=d.kilit||null;
 }
 const clone = o => JSON.parse(JSON.stringify(o));
+/* belge numarası boş kalan her kayda türüne göre seri numarası: GLR-2026-01 (gelir), GDR (gider), DKT (dekont), THS, ODM, VRM, CEK */
+const BN_SERI={satis:"GLR",hesap_giris:"GLR",alis:"GDR",hesap_cikis:"GDR",borc_dekont:"DKT",alacak_dekont:"DKT",tahsilat:"THS",odeme:"ODM",virman:"VRM",cek_tahsil:"CEK",cek_odeme:"CEK",cek_karsiliksiz:"CEK"};
+const BN_AD={GLR:"gelir (satış faturası, hesaba giriş)",GDR:"gider (alış faturası, hesaptan çıkış)",DKT:"borç ve alacak dekontu",THS:"tahsilat",ODM:"ödeme",VRM:"virman",CEK:"çek/senet tahsil ve ödeme"};
+const BN_RE=/^(GLR|GDR|DKT|THS|ODM|VRM|CEK)-(\d{4})-(\d+)$/;
+function bnSon(pfx,yil,haric){ let n=0; for(const h of Object.values(S.data?.hareketler||{})){ if(h.id===haric) continue; const x=(h.belgeNo||"").match(BN_RE); if(x&&x[1]===pfx&&x[2]===yil) n=Math.max(n,+x[3]); } return n; }
+function bnSiradaki(tur,tarih,haric){ const p=BN_SERI[tur]; if(!p) return ""; const y=(tarih||TODAY).slice(0,4); return `${p}-${y}-${String(bnSon(p,y,haric)+1).padStart(2,"0")}`; }
+// boşsa ya da başka seriden / başka yıldan otomatik numara taşıyorsa numara verir
+function bnTamamla(h){ const p=BN_SERI[h.tur]; if(!p) return false; const x=(h.belgeNo||"").trim().match(BN_RE);
+  if((h.belgeNo||"").trim()&&!(x&&(x[1]!==p||x[2]!==(h.tarih||"").slice(0,4)))) return false;
+  h.belgeNo=bnSiradaki(h.tur,h.tarih,h.id); return true; }
 async function put(col,id,data){
+  if(col==="hareketler"&&data) bnTamamla(data);
   if(COLS[col]) S.data[col][id]=clone(data);
   else if(col==="ayarlar") S.data.ayar=clone(data);
   else if(col==="kilit") S.data.kilit=data.tarih||null;
@@ -1316,6 +1327,7 @@ function vAyar(){
     <div class="btns"><button class="btn" data-act="mmGonder">Mali müşavire gönderilecek dosyayı indir</button></div>
     <p class="small muted" style="margin:0">İndirilen dosya şifreli kalır. Mali müşavir kendi programında <b>Dosyadan ekle</b> ile alır ve kendi yönetici parolasıyla açar.</p>
   </div></section>
+  ${S.canWrite?belgeNoPanel():""}
   ${S.canEdit?modulPanel():""}
   ${turPanel()}
   ${S.canEdit?kullaniciPanel():""}
@@ -1336,7 +1348,8 @@ function modal(title,body,foot){
   o.innerHTML=`<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2><button class="x" data-act="close" aria-label="Kapat">×</button></header>${body}${foot?`<footer>${foot}</footer>`:""}</div>`;
   o.hidden=false; setTimeout(()=>o.querySelector("input:not([type=hidden]),select")?.focus(),30);
 }
-function closeModal(){ $("#overlay").hidden=true; $("#overlay").innerHTML=""; }
+function closeModal(){ $("#overlay").hidden=true; $("#overlay").innerHTML="";
+  if(S._hgPark){ const {el,fr}=S._hgPark; S._hgPark=null; if(el.isConnected&&!el.firstChild) el.appendChild(fr); } }
 $("#overlay").addEventListener("mousedown",e=>{ if(e.target.id==="overlay") closeModal(); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!$("#overlay").hidden) closeModal(); if(e.key==="Enter"&&e.target.matches?.("tr[tabindex]")) e.target.click(); });
 function showErr(t){ const el=$("#mErr"); if(el){ el.textContent=t; el.hidden=false; } }
@@ -1462,14 +1475,16 @@ function islemForm(opt={}){
   }
   /* elle girilen satış faturasına STK serisinden sıradaki numara (yalnızca STK serisi kullanan firmada, yeni kayıtta) */
   const stkKullan=!h&&modulAcik("tahakkuk");
-  function belgeOto(){ if(!stkKullan) return; const b=$("#i_belge"), ip=$("#i_belgeOto"); if(!b) return;
+  // düzenlemede: kayıt numarasızsa veya türü değişince eski otomatik numara yenisiyle değişeceği için ipucu gösterilir
+  function belgeOto(){ const b=$("#i_belge"), ip=$("#i_belgeOto"); if(!b) return;
+    if(!stkKullan){ const sira=bnSiradaki(st.tur,$("#i_tarih")?.value||TODAY,h?.id); b.placeholder=sira; if(ip){ ip.textContent=`Boş bırakırsanız sıradaki numara verilir: ${sira}`; ip.hidden=!!b.value||!sira; } return; }
     const tr=$("#i_tarih")?.value||TODAY, olmali=st.tur==="satis"&&tr>=STK_BAS;
     const elle=b.value!==""&&b.value!==b.dataset.oto;
     if(olmali&&!b.dataset.sil&&!elle){ const y=tr.slice(0,4), no=seriNo("gelir",y,seriSon("gelir",y)+1); b.value=no; b.dataset.oto=no; }
     else if(!olmali&&b.value&&b.value===b.dataset.oto){ b.value=""; b.dataset.oto=""; }
-    const alis=st.tur==="alis"&&tr>=STK_BAS, sira=alis?seriNo("gider",tr.slice(0,4),seriSon("gider",tr.slice(0,4))+1):"";
-    b.placeholder=alis?sira:"";
-    if(ip){ if(alis&&!b.value){ ip.textContent=`Boş bırakırsanız sıradaki numara verilir: ${sira}`; ip.hidden=false; }
+    const sira=bnSiradaki(st.tur,tr,h?.id);
+    b.placeholder=sira;
+    if(ip){ if(!b.value&&sira){ ip.textContent=`Boş bırakırsanız sıradaki numara verilir: ${sira}`; ip.hidden=false; }
       else { ip.textContent="STK serisinden sıradaki numara verildi; silebilir veya değiştirebilirsiniz."; ip.hidden=!(b.value&&b.value===b.dataset.oto); } } }
   let upd=function(first){
     const t=st.tur, isCari=CARI_TUR.includes(t);
@@ -1570,7 +1585,6 @@ function islemForm(opt={}){
     if(t==="virman"&&fd.hedefHesapId===hesapId) return showErr("Kaynak ve hedef hesap aynı olamaz.");
     let belgeNo=(fd.belgeNo||"").trim();
     if(stkKullan&&t==="satis"&&belgeNo&&belgeNo===$("#i_belge")?.dataset.oto&&tarih>=STK_BAS){ const y=tarih.slice(0,4); belgeNo=seriNo("gelir",y,seriSon("gelir",y)+1); }
-    if(stkKullan&&t==="alis"&&!belgeNo&&tarih>=STK_BAS){ const y=tarih.slice(0,4); belgeNo=seriNo("gider",y,seriSon("gider",y)+1); }
     if(stkKullan&&t==="satis"&&seriMi("gelir",belgeNo)&&S.hareketler.some(x=>x.id!==h?.id&&x.tur==="satis"&&x.belgeNo===belgeNo)) return showErr(`${belgeNo} numarası başka bir satış faturasında kullanılıyor.`);
     if(stkKullan&&t==="alis"&&seriMi("gider",belgeNo)&&S.hareketler.some(x=>x.id!==h?.id&&x.tur==="alis"&&x.belgeNo===belgeNo)) return showErr(`${belgeNo} numarası başka bir alış faturasında kullanılıyor.`);
     const rec={...(h||{}),id:h?.id||uid("hr"),tur:t,tarih,tutar,doviz:dv,kur:kr,belgeNo,aciklama:fd.aciklama||""};
@@ -1604,7 +1618,7 @@ function islemForm(opt={}){
       if(!(await put("cekler",cek.id,{...cek,durum:"ciro",ciroCariId:cariId,ciroTarih:tarih,ciroHareketId:rec.id}))) return;
     }
     if(opt.inline) S.view.hg={tur:t,kanal:k||S.view.hg?.kanal,hesap:hesapId||S.view.hg?.hesap,tarih};
-    if(await put("hareketler",rec.id,rec)){ closeModal(); toast(h?(h.tur!==t?`İşlem türü ${TUR[t]} olarak düzeltildi`:"İşlem güncellendi"):TUR[t]+" kaydedildi"+(opt.inline&&isCari?" · "+cariAd(cariId):"")+(stkKullan&&((t==="satis"&&seriMi("gelir",rec.belgeNo))||(t==="alis"&&seriMi("gider",rec.belgeNo)))?" · "+rec.belgeNo:"")); }
+    if(await put("hareketler",rec.id,rec)){ closeModal(); toast(h?(h.tur!==t?`İşlem türü ${TUR[t]} olarak düzeltildi`:"İşlem güncellendi"):TUR[t]+" kaydedildi"+(opt.inline&&isCari?" · "+cariAd(cariId):"")+(!h&&rec.belgeNo&&!fd.belgeNo?" · "+rec.belgeNo:(stkKullan&&t==="satis"&&seriMi("gelir",rec.belgeNo)?" · "+rec.belgeNo:""))); }
   });
 }
 function otoHareket(h){
@@ -2212,7 +2226,7 @@ async function bankaAktarKaydet(){
     if(r.tur==="tahsilat"||r.tur==="odeme") h={...base,tur:r.tur,cariId:r.cariId,kanal:"banka",hesapId:BK.hesap};
     else if(r.tur==="virman") h={...base,tur:"virman",hesapId:BK.hesap,hedefHesapId:r.hedef};
     else { h={...base,tur:r.tur,hesapId:BK.hesap,kategori:(r.kategori||(r.tutar>0?"Diğer gelir":"Diğer gider")).trim()}; if(h.kategori!=="POS / kredi kartı tahsilatı"&&!katListe().includes(h.kategori)) turEkle(r.tutar>0?"gelir":"gider",h.kategori); }
-    S.data.hareketler[id]=h;
+    bnTamamla(h); S.data.hareketler[id]=h;
     S.data.bankaKurallari[kuralAnahtar(r.aciklama)]={yon:r.tutar>0?"giris":"cikis",tur:r.tur,cariId:r.cariId,kategori:r.kategori,hedef:r.hedef};
   }
   const kk=Object.keys(S.data.bankaKurallari); if(kk.length>2000) for(const k of kk.slice(0,kk.length-2000)) delete S.data.bankaKurallari[k];
@@ -2532,9 +2546,9 @@ function topluDegistirModal(){
       const h=S.data.hareketler[h0.id]; if(!h) continue;
       if(kilitli(h.tarih)){ atla.push("kilitli dönemde"); continue; }
       let deg=false;
-      if(itur&&h.tur!==itur){ const n=turCevir(h,itur,cari,hes); if(n) atla.push(n); else deg=true; }
+      if(itur&&h.tur!==itur){ const n=turCevir(h,itur,cari,hes); if(n) atla.push(n); else { bnTamamla(h); deg=true; } }
       if(cc&&h.cariId&&h.cariId!==cari){ if(h.cekId) atla.push("çek/senede bağlı, cari değiştirilemedi"); else if((cc.doviz||"TRY")!==(h.doviz||"TRY")) atla.push("para birimi farklı cariye taşınamadı"); else { h.cariId=cari; deg=true; } }
-      if(tarih&&h.tarih!==tarih){ h.tarih=tarih; deg=true; }
+      if(tarih&&h.tarih!==tarih){ h.tarih=tarih; bnTamamla(h); deg=true; }
       if(hc&&h.hesapId&&h.hesapId!==hes&&["tahsilat","odeme","hesap_giris","hesap_cikis"].includes(h.tur)){
         if(h.cekId) atla.push("çek/senede bağlı, hesap değiştirilemedi"); else if(hc.doviz!==S.data.hesaplar[h.hesapId]?.doviz) atla.push("para birimi farklı hesaba taşınamadı");
         else { h.hesapId=hes; if(["nakit","banka","kk"].includes(h.kanal)) h.kanal=hc.tip==="kasa"?"nakit":h.kanal==="nakit"?"banka":h.kanal; deg=true; } }
@@ -2546,6 +2560,11 @@ function topluDegistirModal(){
     toast(`${n} kayıt değiştirildi${atla.length?` · ${nedenOzet(atla)}`:""}`);
   });
 }
+Object.assign(ACT,{ bnAta:el=>{ const L=bnEksikler(), ac=L.filter(h=>!kilitli(h.tarih)), kil=L.length-ac.length;
+    if(!ac.length) return toast(kil?"Numarasız kayıtların hepsi kilitli dönemde.":"Numarasız kayıt yok.");
+    if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent=`${ac.length} kayda tarih sırasıyla numara verilsin mi? Onayla`; return; }
+    for(const h of ac) bnTamamla(S.data.hareketler[h.id]);
+    changed(); toast(`${ac.length} kayda belge numarası verildi${kil?` · ${kil} kayıt kilitli dönemde olduğu için atlandı`:""}`); } });
 Object.assign(ACT,{ efTemizle:()=>{ if(S.view.ce) S.view.ce.flt={}; render(); } });
 Object.assign(ACT,{ topluSil:()=>topluSilModal(), topluDegistir:()=>topluDegistirModal(), secTemizle:()=>{ S.sec.clear(); document.querySelectorAll("[data-sec],[data-secall]").forEach(x=>{ x.checked=false; x.indeterminate=false; x.closest("tr")?.classList.remove("secili"); }); secCubukGuncelle(); } });
 
@@ -2946,6 +2965,12 @@ Object.assign(ACT,{
     changed(); toast(`${hs.filter(h=>h.tur==="satis"||h.tur==="alis").length} kaydın tahakkuku geri alındı`); },
   modulDegis:el=>{ if(!S.canEdit) return; const ad=el.dataset.modul; S.data.ayar.moduller={...(S.data.ayar.moduller||{}),[ad]:el.checked}; changed(); toast(el.checked?"Modül açıldı":"Modül kapatıldı"); }
 });
+function bnEksikler(){ return Object.values(S.data.hareketler).filter(h=>BN_SERI[h.tur]&&!(h.belgeNo||"").trim()).sort((a,b)=>(a.tarih||"").localeCompare(b.tarih||"")||(a.at||"").localeCompare(b.at||"")); }
+function belgeNoPanel(){ const L=bnEksikler(); const say={}; for(const h of L) say[BN_SERI[h.tur]]=(say[BN_SERI[h.tur]]||0)+1;
+  return `<section class="panel" data-w><header><h2>Belge numaraları</h2><span class="small muted">Numarası boş bırakılan kayıtlara sistem numara verir</span></header><div class="pad" style="display:flex;flex-direction:column;gap:10px">
+    <div class="small">Seriler: ${Object.entries(BN_AD).map(([k,v])=>`<b class="mono">${k}</b> ${v}`).join(" · ")}. Biçim <span class="mono">GLR-2026-01</span>: seri, yıl, yıl içinde sıra.</div>
+    ${L.length?`<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span>Daha önce girilmiş <b>${L.length} kaydın</b> belge numarası boş (${Object.entries(say).map(([k,v])=>`${k}: ${v}`).join(", ")}).</span><button class="btn pri sm" data-act="bnAta">Bunlara numara ver</button></div>`:`<div class="small muted">Numarasız kayıt yok.</div>`}
+  </div></section>`; }
 function modulPanel(){
   return `<section class="panel" data-admin><header><h2>Ek modüller</h2><span class="small muted">Yalnızca bu firmada görünür; diğer firmaları etkilemez</span></header><div class="pad">
     <label style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-modul="tahakkuk" ${modulAcik("tahakkuk")?"checked":""} style="margin-top:3px">
@@ -2955,7 +2980,9 @@ function modulPanel(){
 
 /* ---------- hızlı kayıt ekranı ---------- */
 function islemCiz(opt,baslik,govde,alt){
-  if(!opt.inline) return modal(baslik,govde,alt);
+  if(!opt.inline){ // hızlı kayıt sayfasındaki form aynı alan kimliklerini kullanır; pencere açıkken kenara alınır, kapanınca geri konur
+    const hg=$("#hgForm"); if(hg&&hg.firstChild&&!S._hgPark){ const fr=document.createDocumentFragment(); while(hg.firstChild) fr.appendChild(hg.firstChild); S._hgPark={el:hg,fr}; }
+    return modal(baslik,govde,alt); }
   $(opt.inline).innerHTML=govde+`<div style="padding:0 18px 14px"><div class="notice small" id="etki"></div></div><div class="hg-alt"><span class="small muted">Kaydet: <b>Enter</b> · Kayıt cariye ve seçilen kasa/bankaya birlikte işlenir</span><div class="btns"><button class="btn" type="button" data-act="hgTemizle">Temizle</button><button class="btn pri" type="submit" form="iForm" data-w>Kaydet</button></div></div>`;
 }
 function etkiHesapla(st,F,doviz){
@@ -3249,7 +3276,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.7.10-önizleme";
+const SURUM="1.8.0-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
