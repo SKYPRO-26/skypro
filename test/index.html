@@ -1532,6 +1532,9 @@ function islemForm(opt={}){
   $("#i_belge")?.addEventListener("input",e=>{ const b=e.target; if(b.value==="") b.dataset.sil="1"; else delete b.dataset.sil; belgeOto(); });
   $("#i_tarih")?.addEventListener("change",()=>belgeOto());
   $("#turSeg")?.addEventListener("click",e=>{ const b=e.target.closest("button[data-t]"); if(!b) return; st.tur=b.dataset.t; F.querySelectorAll("#turSeg button").forEach(x=>x.setAttribute("aria-pressed",x===b)); if(!h) $("#i_kur").value=""; upd(true);
+    // seçilen ödeme şekline uygun hesap yoksa hesabı olan ilk ödeme şekline geç (ör. banka hesabı yoksa nakit)
+    const ks=$("#i_kanal"), hs=$("#i_hesap");
+    if(ks&&!ks.closest(".f").hidden&&hs&&!hs.options.length){ for(const o of [...ks.options]){ if(o.value===st.kanal) continue; st.kanal=o.value; upd(); if(hs.options.length) break; } if(!hs.options.length){ st.kanal=ks.options[0]?.value||st.kanal; upd(); } }
     if(h){ const ttl=$(".sheet h2"); if(ttl) ttl.textContent=TUR[st.tur]+" düzenle";
       const u=$("#turUyari"); if(u){ const yon=t=>BORC.has(t)?"borç":ALACAK.has(t)?"alacak":"", d=st.tur!==h.tur, P=t=>["tahsilat","odeme"].includes(t), CF=t=>["satis","alis","borc_dekont","alacak_dekont"].includes(t), HS=t=>["hesap_giris","hesap_cikis","virman"].includes(t);
         const n=[];
@@ -2516,6 +2519,7 @@ function topluDegistirModal(){
     `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="tdForm">Uygula</button></div>`);
   $("#td_itur").addEventListener("change",e=>{ const t=e.target.value, b=$("#td_iturBilgi"); if(!t){ b.textContent="Seçilen kayıtların hepsi bu türe çevrilir."; return; }
     const ayni=L.filter(h=>h.tur===t).length, gerekH=(TC_P.includes(t)||TC_HS.includes(t))&&L.some(h=>!h.hesapId), gerekC=(TC_CF.includes(t)||TC_P.includes(t))&&L.some(h=>!h.cariId);
+    if(gerekH&&$("#td_hes")&&!$("#td_hes").value&&S.hesaplar.size===1) $("#td_hes").value=[...S.hesaplar.keys()][0];
     b.innerHTML=`${L.length-ayni} kayıt <b>${TUR[t]}</b> olarak düzeltilecek${ayni?` (${ayni} kayıt zaten bu türde)`:""}.${gerekH?" Kasa/banka hesabı olmayan kayıtlar için aşağıdan <b>hesap seçin</b>.":""}${gerekC?" Carisi olmayan kayıtlar için aşağıdan <b>cari seçin</b>.":""} Çek/senede bağlı ve kilitli kayıtlar atlanır.`; });
   $("#tdForm").addEventListener("submit",e=>{
     e.preventDefault();
@@ -3245,7 +3249,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.7.9-önizleme";
+const SURUM="1.7.10-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
