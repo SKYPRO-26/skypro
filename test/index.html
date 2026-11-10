@@ -1378,7 +1378,7 @@ function modal(title,body,foot){
   o.innerHTML=`<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2><button class="x" data-act="close" aria-label="Kapat">×</button></header>${body}${foot?`<footer>${foot}</footer>`:""}</div>`;
   o.hidden=false; setTimeout(()=>o.querySelector("input:not([type=hidden]),select")?.focus(),30);
 }
-function closeModal(){ $("#overlay").hidden=true; $("#overlay").innerHTML="";
+function closeModal(){ $("#overlay").hidden=true; $("#overlay").innerHTML=""; S._vtTaslak=null;
   if(S._hgPark){ const {el,fr}=S._hgPark; S._hgPark=null; if(el.isConnected&&!el.firstChild) el.appendChild(fr); } }
 $("#overlay").addEventListener("mousedown",e=>{ if(e.target.id==="overlay") closeModal(); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!$("#overlay").hidden) closeModal(); if(e.key==="Enter"&&e.target.matches?.("tr[tabindex]")) e.target.click(); });
@@ -2693,7 +2693,9 @@ function vtListe(bas,bit){ const out=[], y0=+bas.slice(0,4)-1, y1=+bit.slice(0,4
     else if(t.siklik==="yil"){ for(let y=y0;y<=y1;y++) ekle(t,String(y),`${y} yılı`,t.son(String(y))); }
     else if(t.siklik==="ozel"){ for(let y=y0;y<=y1+1;y++) for(const [d,ad] of t.tarihler(y)) ekle(t,`${y}-${ad}`,`${y} ${ad}`,d); } }
   return out.sort((a,b)=>a.son.localeCompare(b.son)||a.tur.ad.localeCompare(b.tur.ad,"tr")); }
-const vtProfil = () => S.data.vergiProfil||(S.data.vergiProfil={});
+const vtKayitli = () => S.data.vergiProfil||(S.data.vergiProfil={});
+const vtProfil = () => S._vtTaslak||vtKayitli(); // işaret taslağı varsa (onay bekleyen) onu kullanır
+const vtTurlerP = (P,cid) => { const p=P[cid]; return p?VT_TUR.filter(t=>p[t.k]):VT_TUR.filter(t=>t.vars); };
 const MT_AD={sahis:"Şahıs",sermaye:"Sermaye şirketi"};
 const vtMtTahmin = c => { const u=" "+(c?.unvan||"").toLocaleUpperCase("tr").replace(/[.,;:()\-]/g," ").replace(/\s+/g," ")+" ";
   return /( LTD | LİMİTED | ŞTİ | STİ | A Ş | AŞ | ANONİM | KOOP)/.test(u)?"sermaye":"sahis"; };
@@ -2716,10 +2718,16 @@ function vergiTakvimiModal(){
   modal("Vergi takviminden iş oluştur",`<div style="display:flex;flex-direction:column;gap:12px;padding:16px 20px"><div class="vt-aylar" id="vtAylar"></div><div id="vtGovde" style="display:flex;flex-direction:column;gap:12px"></div></div>`,
     `<span class="small muted" id="vtDurum"></span><div class="btns"><button class="btn" data-act="close">Kapat</button><button class="btn pri" id="vtGo" data-w></button></div>`);
   const sh=$("#overlay .sheet"); sh.style.maxWidth="min(1200px,96vw)"; sh.style.width="100%";
-  const profilYaz=cid=>{ const P=vtProfil(); if(!P[cid]) P[cid]=Object.fromEntries(VT_TUR.filter(t=>t.vars).map(t=>[t.k,true])); return P[cid]; };
+  const taslak=()=>S._vtTaslak||(S._vtTaslak=JSON.parse(JSON.stringify(vtKayitli())));
+  const fark=()=>{ if(!S._vtTaslak) return {n:0,h:new Set()}; const K=vtKayitli(), h=new Set();
+    for(const c of vtMukellefler()){ const a=vtTurlerP(K,c.id), b=vtTurlerP(S._vtTaslak,c.id);
+      for(const t of VT_TUR) if(a.includes(t)!==b.includes(t)) h.add(c.id+"|"+t.k);
+      if((K[c.id]?.mt||vtMtTahmin(c))!==(S._vtTaslak[c.id]?.mt||vtMtTahmin(c))) h.add(c.id+"|mt"); }
+    return {n:h.size,h}; };
+  const profilYaz=cid=>{ const P=taslak(); if(!P[cid]) P[cid]=Object.fromEntries(VT_TUR.filter(t=>t.vars).map(t=>[t.k,true])); return P[cid]; };
   const isaretle=(p,k,on)=>{ if(on){ p[k]=true; if(VT_KARSIT[k]) delete p[VT_KARSIT[k]]; } else delete p[k]; };
   const ciz=()=>{
-    const {V,M,yeni,mevcut}=vtAyIsleri(f.ay,atla()), P=vtProfil(), O=vtOnay()[f.ay];
+    const {V,M,yeni,mevcut}=vtAyIsleri(f.ay,atla()), P=vtKayitli(), O=vtOnay()[f.ay], F=fark(), DG=' style="background:#fff1c2"';
     // kaydırma ve odak korunur: işaretleme sonrası sayfa yukarı atlamaz
     const mat=$("#vtGovde .vt-matris"), lst=$("#vtGovde .vt-liste"), sk=mat?[mat.scrollTop,mat.scrollLeft]:null, sl=lst?.scrollTop, ov=$("#overlay").scrollTop;
     const a=document.activeElement, d=a?.dataset||{};
@@ -2739,22 +2747,25 @@ function vergiTakvimiModal(){
         <div class="tw vt-liste" style="max-height:240px;overflow:auto;margin-top:6px"><table><thead><tr><th>Son gün</th><th>Yükümlülük</th><th>Dönem</th><th>Oluşturulacak</th></tr></thead><tbody>
         ${V.map(v=>{ const g=grp.get(v); return `<tr${g.y.length?"":` style="opacity:.55"`}><td class="mono small">${trDate(v.son)}${v.son!==v.ham?` <span class="muted" title="${trDate(v.ham)} tatil/hafta sonu">↷</span>`:""}</td><td class="small">${esc(v.tur.ad)}${v.mt?` <span class="muted">(${MT_AD[v.mt].toLocaleLowerCase("tr")})</span>`:""}</td><td class="small">${esc(v.donemAd)}</td>
           <td class="small">${g.y.length?`<b>${g.y.length}</b> · ${adlar(g.y)}`:`<span class="muted">${g.m.length?"":"takip eden mükellef yok"}</span>`}${g.m.length?` <span class="muted">(${g.m.length} zaten var)</span>`:""}</td></tr>`; }).join("")}</tbody></table></div></details>
-      <div><div class="small" style="margin-bottom:6px"><b>Mükellef × yükümlülük</b> — işaretler mükellef bazında saklanır ve sonraki aylara aynen gelir. Aylık ve 3 aylık muhtasardan biri seçilebilir.</div>
+      <div>${F.n?`<div class="notice warn small" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;position:sticky;top:0;z-index:3"><span><b>${F.n} işaret değişikliği onay bekliyor.</b> Sarı hücreler değişti; yukarıdaki sayılar bu işaretlere göre. Onaylamadan pencereyi kapatırsanız değişiklikler kaydedilmez.</span><span class="btns"><button class="btn sm" id="vtIsVaz">Vazgeç</button><button class="btn sm pri" id="vtIsOnay" data-w>İşaretleri onayla</button></span></div>`:""}
+      <div class="small" style="margin-bottom:6px"><b>Mükellef × yükümlülük</b> — işaretledikten sonra "İşaretleri onayla" ile kaydedin; kaydedilen işaretler mükellef bazında saklanır ve sonraki aylara aynen gelir. Aylık ve 3 aylık muhtasardan biri seçilebilir.</div>
       ${M.length?`<div class="tw vt-matris"><table><thead><tr><th>Mükellef</th><th>Tür</th>${VT_TUR.map(t=>`<th class="c" title="${esc(t.ad)} · ${esc(t.kural)}"><label style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer"><span>${esc(t.kisa)}</span><input type="checkbox" data-vtsutun="${t.k}" ${M.every(c=>vtCariTurleri(c.id).includes(t))?"checked":""} aria-label="${esc(t.ad)}: tüm mükellefler"></label></th>`).join("")}</tr></thead><tbody>
         ${M.map(c=>{ const T=vtCariTurleri(c.id); return `<tr><td class="small">${esc(c.kod)} · ${esc(c.unvan)}${P[c.id]?"":` <span class="pill" title="Henüz işaretlenmedi; varsayılan KDV, muhtasar, Ba-Bs, e-Defter">varsayılan</span>`}</td>
-          <td><select data-vtmt="${c.id}" style="font-size:12px;padding:3px 6px" aria-label="${esc(c.unvan)} mükellef türü">${Object.entries(MT_AD).map(([k,v])=>`<option value="${k}" ${vtMt(c.id)===k?"selected":""}>${v}</option>`).join("")}</select></td>${VT_TUR.map(t=>`<td class="c"><input type="checkbox" data-vtc="${c.id}" data-vtt="${t.k}" ${T.includes(t)?"checked":""} aria-label="${esc(c.unvan)} ${esc(t.ad)}"></td>`).join("")}</tr>`; }).join("")}</tbody></table></div>`
+          <td${F.h.has(c.id+"|mt")?DG:""}><select data-vtmt="${c.id}" style="font-size:12px;padding:3px 6px" aria-label="${esc(c.unvan)} mükellef türü">${Object.entries(MT_AD).map(([k,v])=>`<option value="${k}" ${vtMt(c.id)===k?"selected":""}>${v}</option>`).join("")}</select></td>${VT_TUR.map(t=>`<td class="c"${F.h.has(c.id+"|"+t.k)?DG+` title="Değişti, onay bekliyor"`:""}><input type="checkbox" data-vtc="${c.id}" data-vtt="${t.k}" ${T.includes(t)?"checked":""} aria-label="${esc(c.unvan)} ${esc(t.ad)}"></td>`).join("")}</tr>`; }).join("")}</tbody></table></div>`
       :`<div class="notice small">Mükellef listesi boş. Cari hesaplarda müşteri tipinde cari açın.</div>`}</div>
       <div class="notice small">${O?(yeni.length?`Bu ayın listesi onaylanmıştı; sonradan yapılan işaretlemelerle <b>${yeni.length} yeni iş</b> eklenebilir.`:`Bu ayın listesi onaylandı, eklenecek iş kalmadı. Sonraki aya geçmek için yukarıdan ayı seçin.`):`Onayladığınızda <b>${ayTam(f.ay)}</b> ayında son günü olan <b>${yeni.length} iş</b> oluşturulur. Diğer aylar ayrıca onay ister.`}</div>
       <p class="small muted" style="margin:0">Kurallar GİB vergi takvimine göre programa işlendi; 2026–2027 resmi tatilleri dahil. GİB'in duyurduğu süre uzatmaları kendiliğinden gelmez: uzatma olduğunda işin termin tarihini değiştirin.</p>`;
-    const go=$("#vtGo"); go.disabled=!yeni.length||!S.canWrite;
-    go.textContent=yeni.length?(O?`${yeni.length} yeni işi ekle`:`${ayTam(f.ay)} listesini onayla · ${yeni.length} iş`):(O?"Onaylandı ✓":"Oluşturulacak iş yok");
-    $("#vtDurum").textContent=O?"":`${ayTam(f.ay)} için onay bekleniyor`;
+    const go=$("#vtGo"); go.disabled=!yeni.length||!S.canWrite||F.n>0; go.title=F.n?"Önce işaret değişikliklerini onaylayın":"";
+    go.textContent=F.n?"Önce işaretleri onaylayın":yeni.length?(O?`${yeni.length} yeni işi ekle`:`${ayTam(f.ay)} listesini onayla · ${yeni.length} iş`):(O?"Onaylandı ✓":"Oluşturulacak iş yok");
+    $("#vtDurum").textContent=F.n?`${F.n} işaret değişikliği onay bekliyor`:O?"":`${ayTam(f.ay)} için onay bekleniyor`;
     const m2=$("#vtGovde .vt-matris"); if(m2&&sk){ m2.scrollTop=sk[0]; m2.scrollLeft=sk[1]; }
     const l2=$("#vtGovde .vt-liste"); if(l2&&sl!=null) l2.scrollTop=sl;
     $("#overlay").scrollTop=ov;
     if(odak) $("#overlay").querySelector(odak)?.focus({preventScroll:true});
   };
-  sh.addEventListener("click",e=>{ const b=e.target.closest("[data-vtay]"); if(b){ f.ay=b.dataset.vtay; ciz(); } });
+  sh.addEventListener("click",e=>{ const b=e.target.closest("[data-vtay]"); if(b){ f.ay=b.dataset.vtay; ciz(); }
+    if(e.target.id==="vtIsVaz"){ S._vtTaslak=null; ciz(); toast("İşaret değişiklikleri geri alındı"); }
+    if(e.target.id==="vtIsOnay"){ const n=fark().n; S.data.vergiProfil=S._vtTaslak; S._vtTaslak=null; scheduleSave(); ciz(); toast(`${n} işaret değişikliği kaydedildi`); } });
   sh.addEventListener("toggle",e=>{ if(e.target.id==="vtDetay"){ f.detay=e.target.open; const s2=e.target.querySelector("summary"); if(s2) s2.innerHTML=s2.innerHTML.replace(/listeyi (gizle|gör)$/,"listeyi "+(f.detay?"gizle":"gör")); } },true);
   sh.addEventListener("change",e=>{ const el=e.target, d=el.dataset;
     if(el.id==="vt_gecmis"){ f.gecmis=el.checked; return ciz(); }
@@ -2762,8 +2773,8 @@ function vergiTakvimiModal(){
     else if(d.vtmt){ profilYaz(d.vtmt).mt=el.value; }
     else if(d.vtsutun){ for(const c of vtMukellefler()) isaretle(profilYaz(c.id),d.vtsutun,el.checked); }
     else return;
-    scheduleSave(); ciz(); });
-  $("#vtGo").addEventListener("click",()=>{ const {yeni}=vtAyIsleri(f.ay,atla()); if(!yeni.length) return; const st=stamp();
+    ciz(); });
+  $("#vtGo").addEventListener("click",()=>{ if(fark().n) return; S._vtTaslak=null; const {yeni}=vtAyIsleri(f.ay,atla()); if(!yeni.length) return; const st=stamp();
     for(const {v,c,key} of yeni){ const t=v.tur, id=uid("is");
       isler()[id]={id,baslik:`${t.ad} · ${v.donemAd}`,firma:c.unvan,cariId:c.id,grup:t.grup||t.k,sonTarih:v.son,oncelik:"normal",durum:"acik",aciklama:`Vergi takvimi: ${t.ad}, ${v.donemAd}. Son gün ${trDate(v.son)}${v.son!==v.ham?` (${trDate(v.ham)} tatil/hafta sonu olduğu için)`:""}.`,vergiKey:key,kaynak:"vergi",vtAy:f.ay,...st}; }
     const O=vtOnay(); O[f.ay]={...st,n:(O[f.ay]?.n||0)+yeni.length};
@@ -3602,7 +3613,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.9.2-önizleme";
+const SURUM="1.9.3-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
