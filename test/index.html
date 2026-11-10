@@ -2673,7 +2673,7 @@ const VT_TUR=[
   {k:"DMG",kisa:"Damga",ad:"Damga vergisi beyannamesi",kural:"Dönemi izleyen ayın 26'sı",siklik:"ay",son:ay=>ayGunT(ayKaydir(ay,1),26),grup:"Damga"},
   {k:"BABS",kisa:"Ba-Bs",ad:"Ba-Bs formları",kural:"Dönemi izleyen ayın son günü",siklik:"ay",son:ay=>aySonu(ayKaydir(ay,1)),vars:true,grup:"Ba-Bs"},
   {k:"SGK",kisa:"SGK prim",ad:"SGK prim ödemesi",kural:"Dönemi izleyen ayın son günü",siklik:"ay",son:ay=>aySonu(ayKaydir(ay,1))},
-  {k:"EDF",kisa:"e-Defter",ad:"e-Defter berat yükleme",kural:"Dönemi izleyen 3. ayın son günü",siklik:"ay",son:ay=>aySonu(ayKaydir(ay,3)),grup:"e-Defter"},
+  {k:"EDF",kisa:"e-Defter",ad:"e-Defter berat yükleme",kural:"3 aylık: şahıs çeyreği izleyen 3. ayın 10'u (4. dönem Nisan 10) · sermaye şirketi 14'ü (4. dönem Mayıs 14)",siklik:"edefter",vars:true,grup:"e-Defter"},
   {k:"GV",kisa:"Geçici",ad:"Geçici vergi beyannamesi",kural:"Çeyreği izleyen 2. ayın 17'si (1.–3. dönem)",siklik:"ceyrek",son:ay=>ayGunT(ayKaydir(ay,2),17),grup:"Geçici vergi"},
   {k:"YGV",kisa:"Yıllık gelir",ad:"Yıllık gelir vergisi beyannamesi",kural:"Mart sonu",siklik:"yil",son:y=>`${+y+1}-03-31`,grup:"Gelir vergisi"},
   {k:"KV",kisa:"Kurumlar",ad:"Kurumlar vergisi beyannamesi",kural:"Nisan sonu",siklik:"yil",son:y=>`${+y+1}-04-30`,grup:"Kurumlar vergisi"},
@@ -2685,11 +2685,18 @@ function vtListe(bas,bit){ const out=[], y0=+bas.slice(0,4)-1, y1=+bit.slice(0,4
   const ekle=(t,donem,donemAd,ham)=>{ const son=ilkIsGunu(ham); if(son>=bas&&son<=bit) out.push({tur:t,donem,donemAd,ham,son}); };
   for(const t of VT_TUR){
     if(t.siklik==="ay"){ for(let ay=`${y0}-01`;ay<=bit.slice(0,7);ay=ayKaydir(ay,1)) ekle(t,ay,ayTam(ay),t.son(ay)); }
+    else if(t.siklik==="edefter"){ for(let y=y0;y<=y1;y++) for(const [q,ay] of [[1,"03"],[2,"06"],[3,"09"],[4,"12"]]) for(const mt of ["sahis","sermaye"]){
+        const ham=q<4?ayGunT(ayKaydir(`${y}-${ay}`,3),mt==="sahis"?10:14):(mt==="sahis"?`${y+1}-04-10`:`${y+1}-05-14`);
+        const son=ilkIsGunu(ham); if(son>=bas&&son<=bit) out.push({tur:t,donem:`${y}-Q${q}`,donemAd:`${y} ${q}. dönem`,ham,son,mt}); } }
     else if(t.siklik==="ceyrek"){ for(let y=y0;y<=y1;y++) for(const [q,ay] of [[1,"03"],[2,"06"],[3,"09"]]) ekle(t,`${y}-Q${q}`,`${y} ${q}. dönem`,t.son(`${y}-${ay}`)); }
     else if(t.siklik==="yil"){ for(let y=y0;y<=y1;y++) ekle(t,String(y),`${y} yılı`,t.son(String(y))); }
     else if(t.siklik==="ozel"){ for(let y=y0;y<=y1+1;y++) for(const [d,ad] of t.tarihler(y)) ekle(t,`${y}-${ad}`,`${y} ${ad}`,d); } }
   return out.sort((a,b)=>a.son.localeCompare(b.son)||a.tur.ad.localeCompare(b.tur.ad,"tr")); }
 const vtProfil = () => S.data.vergiProfil||(S.data.vergiProfil={});
+const MT_AD={sahis:"Şahıs",sermaye:"Sermaye şirketi"};
+const vtMtTahmin = c => { const u=" "+(c?.unvan||"").toLocaleUpperCase("tr").replace(/[.,;:()\-]/g," ").replace(/\s+/g," ")+" ";
+  return /( LTD | LİMİTED | ŞTİ | STİ | A Ş | AŞ | ANONİM | KOOP)/.test(u)?"sermaye":"sahis"; };
+const vtMt = cid => vtProfil()[cid]?.mt||vtMtTahmin(S.cariler.get(cid));
 const vtMukellefler = () => sortedCariler().filter(c=>["musteri","ikisi"].includes(c.tip)||vtProfil()[c.id]);
 function vtCariTurleri(cid){ const p=vtProfil()[cid]; if(p) return VT_TUR.filter(t=>p[t.k]); return VT_TUR.filter(t=>t.vars); }
 function vergiTakvimiModal(){
@@ -2697,7 +2704,8 @@ function vergiTakvimiModal(){
   const ciz=()=>{
     const bit=addDays(aySonu(ayKaydir(f.bas.slice(0,7),f.ay-1)),0), V=vtListe(f.bas,bit), M=vtMukellefler(), P=vtProfil();
     const var_=new Set(isListe().map(x=>x.vergiKey).filter(Boolean));
-    let yeni=0, mevcut=0; for(const c of M) for(const t of vtCariTurleri(c.id)) for(const v of V) if(v.tur===t){ var_.has(`${t.k}|${v.donem}|${c.id}`)?mevcut++:yeni++; }
+    const uyar=(v,c)=>!v.mt||v.mt===vtMt(c.id);
+    let yeni=0, mevcut=0; for(const c of M) for(const t of vtCariTurleri(c.id)) for(const v of V) if(v.tur===t&&uyar(v,c)){ var_.has(`${t.k}|${v.donem}|${c.id}`)?mevcut++:yeni++; }
     const kullan=VT_TUR.filter(t=>V.some(v=>v.tur===t));
     modal("Vergi takviminden iş oluştur",`<div style="display:flex;flex-direction:column;gap:12px;padding:16px 20px">
       <div class="filters" style="align-items:end"><label>Başlangıç<input type="date" id="vt_bas" value="${f.bas}"></label>
@@ -2705,10 +2713,11 @@ function vergiTakvimiModal(){
         <span class="small muted" style="padding-bottom:8px">${trDate(f.bas)} – ${trDate(bit)} arasında son günü olan yükümlülükler</span></div>
       <details ${V.length?"":"open"}><summary class="small"><b>${V.length} son gün</b> bu aralıkta (tatil ve hafta sonları ilk iş gününe kaydırıldı) — listeyi gör</summary>
         <div class="tw" style="max-height:200px;overflow:auto;margin-top:6px"><table><thead><tr><th>Son gün</th><th>Yükümlülük</th><th>Dönem</th><th>Kural</th></tr></thead><tbody>
-        ${V.map(v=>`<tr><td class="mono small">${trDate(v.son)}${v.son!==v.ham?` <span class="muted" title="${trDate(v.ham)} tatil/hafta sonu">↷</span>`:""}</td><td class="small">${esc(v.tur.ad)}</td><td class="small">${esc(v.donemAd)}</td><td class="small muted">${esc(v.tur.kural)}</td></tr>`).join("")}</tbody></table></div></details>
+        ${V.map(v=>`<tr><td class="mono small">${trDate(v.son)}${v.son!==v.ham?` <span class="muted" title="${trDate(v.ham)} tatil/hafta sonu">↷</span>`:""}</td><td class="small">${esc(v.tur.ad)}${v.mt?` <span class="muted">(${MT_AD[v.mt].toLocaleLowerCase("tr")})</span>`:""}</td><td class="small">${esc(v.donemAd)}</td><td class="small muted">${esc(v.tur.kural)}</td></tr>`).join("")}</tbody></table></div></details>
       <div><div class="small" style="margin-bottom:6px"><b>Mükellef × yükümlülük</b> — her mükellef için hangi beyannameleri takip ettiğinizi işaretleyin (bir kez işaretlemeniz yeterli, hatırlanır).</div>
-      ${M.length?`<div class="tw vt-matris"><table><thead><tr><th>Mükellef</th>${VT_TUR.map(t=>`<th class="c" title="${esc(t.ad)} · ${esc(t.kural)}"><label style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer"><span>${esc(t.kisa)}</span><input type="checkbox" data-vtsutun="${t.k}" ${M.every(c=>vtCariTurleri(c.id).includes(t))?"checked":""}></label></th>`).join("")}</tr></thead><tbody>
-        ${M.map(c=>{ const T=vtCariTurleri(c.id); return `<tr><td class="small">${esc(c.kod)} · ${esc(c.unvan)}${P[c.id]?"":` <span class="pill" title="Henüz işaretlenmedi; varsayılan KDV, muhtasar, Ba-Bs">varsayılan</span>`}</td>${VT_TUR.map(t=>`<td class="c"><input type="checkbox" data-vtc="${c.id}" data-vtt="${t.k}" ${T.includes(t)?"checked":""} aria-label="${esc(c.unvan)} ${esc(t.ad)}"></td>`).join("")}</tr>`; }).join("")}</tbody></table></div>`
+      ${M.length?`<div class="tw vt-matris"><table><thead><tr><th>Mükellef</th><th>Tür</th>${VT_TUR.map(t=>`<th class="c" title="${esc(t.ad)} · ${esc(t.kural)}"><label style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer"><span>${esc(t.kisa)}</span><input type="checkbox" data-vtsutun="${t.k}" ${M.every(c=>vtCariTurleri(c.id).includes(t))?"checked":""}></label></th>`).join("")}</tr></thead><tbody>
+        ${M.map(c=>{ const T=vtCariTurleri(c.id); return `<tr><td class="small">${esc(c.kod)} · ${esc(c.unvan)}${P[c.id]?"":` <span class="pill" title="Henüz işaretlenmedi; varsayılan KDV, muhtasar, Ba-Bs, e-Defter">varsayılan</span>`}</td>
+          <td><select data-vtmt="${c.id}" style="font-size:12px;padding:3px 6px" aria-label="${esc(c.unvan)} mükellef türü">${Object.entries(MT_AD).map(([k,v])=>`<option value="${k}" ${vtMt(c.id)===k?"selected":""}>${v}</option>`).join("")}</select></td>${VT_TUR.map(t=>`<td class="c"><input type="checkbox" data-vtc="${c.id}" data-vtt="${t.k}" ${T.includes(t)?"checked":""} aria-label="${esc(c.unvan)} ${esc(t.ad)}"></td>`).join("")}</tr>`; }).join("")}</tbody></table></div>`
       :`<div class="notice small">Mükellef listesi boş. Cari hesaplarda müşteri tipinde cari açın.</div>`}</div>
       <div class="notice small">Bu aralıkta <b>${yeni} yeni iş</b> oluşturulacak${mevcut?` · ${mevcut} iş daha önce oluşturulduğu için atlanacak`:""}. İşler mükellefin adıyla, beyanname türü grubunda ve son güne göre termin tarihiyle açılır.</div>
       <p class="small muted" style="margin:0">Kurallar GİB vergi takvimine göre programa işlendi; 2026–2027 resmi tatilleri dahil. GİB'in duyurduğu süre uzatmaları kendiliğinden gelmez: uzatma olduğunda işin termin tarihini değiştirin.</p></div>`,
@@ -2718,9 +2727,10 @@ function vergiTakvimiModal(){
     $("#vt_ay").addEventListener("change",e=>{ f.ay=+e.target.value; ciz(); });
     const profilYaz=(cid)=>{ if(!P[cid]) P[cid]=Object.fromEntries(VT_TUR.filter(t=>t.vars).map(t=>[t.k,true])); return P[cid]; };
     document.querySelectorAll("[data-vtc]").forEach(el=>el.addEventListener("change",()=>{ const p=profilYaz(el.dataset.vtc); if(el.checked) p[el.dataset.vtt]=true; else delete p[el.dataset.vtt]; scheduleSave(); ciz(); }));
+    document.querySelectorAll("[data-vtmt]").forEach(el=>el.addEventListener("change",()=>{ const p=profilYaz(el.dataset.vtmt); p.mt=el.value; scheduleSave(); ciz(); }));
     document.querySelectorAll("[data-vtsutun]").forEach(el=>el.addEventListener("change",()=>{ for(const c of M){ const p=profilYaz(c.id); if(el.checked) p[el.dataset.vtsutun]=true; else delete p[el.dataset.vtsutun]; } scheduleSave(); ciz(); }));
     $("#vtGo")?.addEventListener("click",()=>{ const st=stamp(); let n=0;
-      for(const c of M) for(const t of vtCariTurleri(c.id)) for(const v of V){ if(v.tur!==t) continue; const key=`${t.k}|${v.donem}|${c.id}`; if(var_.has(key)) continue;
+      for(const c of M) for(const t of vtCariTurleri(c.id)) for(const v of V){ if(v.tur!==t||!uyar(v,c)) continue; const key=`${t.k}|${v.donem}|${c.id}`; if(var_.has(key)) continue;
         const id=uid("is"); isler()[id]={id,baslik:`${t.ad} · ${v.donemAd}`,firma:c.unvan,cariId:c.id,grup:t.grup||t.k,sonTarih:v.son,oncelik:"normal",durum:"acik",aciklama:`Vergi takvimi: ${t.ad}, ${v.donemAd}. Son gün ${trDate(v.son)}${v.son!==v.ham?` (${trDate(v.ham)} tatil/hafta sonu olduğu için)`:""}.`,vergiKey:key,kaynak:"vergi",...st}; var_.add(key); n++; }
       closeModal(); changed(); toast(`${n} iş oluşturuldu`); });
   };
@@ -3558,7 +3568,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.9.0-önizleme";
+const SURUM="1.9.1-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
