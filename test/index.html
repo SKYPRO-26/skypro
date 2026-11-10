@@ -1391,16 +1391,15 @@ function islemForm(opt={}){
   const turSec=["satis","alis","tahsilat","odeme","borc_dekont","alacak_dekont","hesap_giris","hesap_cikis","virman"];
   const kat=`<datalist id="katList">${katListe().map(k=>`<option value="${esc(k)}">`).join("")}</datalist>`;
   const by=h?.by?`<span class="small muted" id="byInfo"></span>`:"<span></span>";
-  /* kayıtlı işlemde tür düzeltme: aynı gruptaki türler arasında (cari ↔ cari, tahsilat ↔ ödeme, hesaba giriş ↔ çıkış) */
-  const TUR_GRUP=[["satis","borc_dekont","alis","alacak_dekont"],["tahsilat","odeme"],["hesap_giris","hesap_cikis"]];
-  const degisTur=h&&!lock&&!cekLinked&&!["cek","senet","kcek","ksenet","ciro"].includes(h.kanal)?(TUR_GRUP.find(g=>g.includes(h.tur))||[]):[];
+  /* kayıtlı işlemde tür düzeltme: bütün türler arasında (çek/senet bağlantılı ve kilitli kayıtlar hariç) */
+  const degisTur=h&&!lock&&!cekLinked&&!["cek","senet","kcek","ksenet","ciro"].includes(h.kanal)&&turSec.includes(h.tur)?turSec:[];
   islemCiz(opt,h?TUR[h.tur]+" düzenle":"Yeni işlem",`<form class="form" id="iForm">
     ${h?(degisTur.length>1?`<div class="f w"><label>İşlem türü <span class="muted" style="font-weight:400">— yanlış girildiyse düzeltebilirsiniz</span></label><div class="seg" id="turSeg">${degisTur.map(t=>`<button type="button" data-t="${t}" aria-pressed="${st.tur===t}">${TUR[t]}</button>`).join("")}</div>${h.tahakkukId?`<span class="hint">Bu kayıt aylık tahakkukla oluşturuldu; türünü değiştirirseniz tahakkuk ekranında o ay için yeniden "bekliyor" görünebilir.</span>`:""}<span class="hint" id="turUyari" hidden></span></div>`:""):`<div class="f w"><label>İşlem türü</label><div class="seg" id="turSeg">${turSec.map(t=>`<button type="button" data-t="${t}" aria-pressed="${st.tur===t}">${TUR[t]}</button>`).join("")}</div></div>`}
     ${lock?`<div class="notice warn f w">Bu işlem kilitli dönemde (${trDate(S.kilit)}); değiştirilemez.</div>`:""}
     ${!h&&S.cariler.size?`<div class="f" data-g="cari"><label for="i_cariAra">Cari ara</label><input type="text" id="i_cariAra" list="cariAraList" placeholder="Ünvan, kod veya VKN yazın" autocomplete="off"><datalist id="cariAraList">${sortedCariler().map(c=>`<option value="${esc(c.kod)} · ${esc(c.unvan)}">`).join("")}</datalist>${opt.inline?`<span class="hint" id="i_cariYok" hidden></span>`:""}</div>`:""}
     <div class="f" data-g="cari"><label for="i_cari" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">Cari${opt.inline&&!h?`<a href="#" data-act="hgYeniCari" style="font-weight:600">+ Yeni cari aç</a>`:""}</label><select id="i_cari" name="cariId" ${cekLinked?"disabled":""}><option value="">Seçin…</option>${sortedCariler().map(c=>`<option value="${c.id}" ${st.cari===c.id?"selected":""}>${esc(c.kod)} · ${esc(c.unvan)}${c.doviz!=="TRY"?" ("+c.doviz+")":""}</option>`).join("")}</select></div>
     <div class="f"><label for="i_tarih">Tarih</label><input type="date" id="i_tarih" name="tarih" value="${h?.tarih||opt.tarih||TODAY}" required></div>
-    <div class="f" data-g="kanal"><label for="i_kanal">Ödeme şekli</label><select id="i_kanal" name="kanal" ${h?"disabled":""}></select></div>
+    <div class="f" data-g="kanal"><label for="i_kanal">Ödeme şekli</label><select id="i_kanal" name="kanal" ${cekLinked||["cek","senet","kcek","ksenet","ciro"].includes(h?.kanal)?"disabled":""}></select></div>
     <div class="f" data-g="hesap"><label for="i_hesap" id="l_hesap">Hesap</label><select id="i_hesap" name="hesapId" ${cekLinked?"disabled":""}></select></div>
     <div class="f" data-g="hedef"><label for="i_hedef">Hedef hesap</label><select id="i_hedef" name="hedefHesapId">${sortedHesaplar().map(x=>`<option value="${x.id}" ${h?.hedefHesapId===x.id?"selected":""}>${esc(x.ad)} (${x.doviz})</option>`).join("")}</select></div>
     <div class="f w" data-g="ciro"><label for="i_ciro">Ciro edilecek çek/senet</label><select id="i_ciro" name="ciroCekId"></select></div>
@@ -1498,8 +1497,15 @@ function islemForm(opt={}){
   $("#i_tarih")?.addEventListener("change",()=>belgeOto());
   $("#turSeg")?.addEventListener("click",e=>{ const b=e.target.closest("button[data-t]"); if(!b) return; st.tur=b.dataset.t; F.querySelectorAll("#turSeg button").forEach(x=>x.setAttribute("aria-pressed",x===b)); if(!h) $("#i_kur").value=""; upd(true);
     if(h){ const ttl=$(".sheet h2"); if(ttl) ttl.textContent=TUR[st.tur]+" düzenle";
-      const u=$("#turUyari"); if(u){ const yon=t=>BORC.has(t)?"borç":ALACAK.has(t)?"alacak":"", d=st.tur!==h.tur;
-        u.hidden=!d; if(d) u.innerHTML=`<b>${TUR[h.tur]}</b> → <b>${TUR[st.tur]}</b> olarak değişecek.${yon(h.tur)&&yon(h.tur)!==yon(st.tur)?` Cari bakiyeye etkisi tersine döner (${yon(h.tur)} → ${yon(st.tur)}).`:""}${["satis","alis"].includes(h.tur)&&!["satis","alis"].includes(st.tur)?" Gelir/gider türü ve KDV bilgisi kaldırılır.":""}`; } } });
+      const u=$("#turUyari"); if(u){ const yon=t=>BORC.has(t)?"borç":ALACAK.has(t)?"alacak":"", d=st.tur!==h.tur, P=t=>["tahsilat","odeme"].includes(t), CF=t=>["satis","alis","borc_dekont","alacak_dekont"].includes(t), HS=t=>["hesap_giris","hesap_cikis","virman"].includes(t);
+        const n=[];
+        if(yon(h.tur)&&yon(st.tur)&&yon(h.tur)!==yon(st.tur)) n.push(`Cari bakiyeye etkisi tersine döner (${yon(h.tur)} → ${yon(st.tur)}).`);
+        if(CF(h.tur)&&P(st.tur)) n.push("Kayıt artık kasa/banka hesabına da işlenir; ödeme şeklini ve hesabı seçin.");
+        if(P(h.tur)&&CF(st.tur)) n.push("Kasa/banka hesabındaki etkisi kaldırılır, yalnızca cariye işlenir.");
+        if(!HS(h.tur)&&HS(st.tur)) n.push("Cari bağlantısı kaldırılır, yalnızca kasa/banka hesabına işlenir.");
+        if(HS(h.tur)&&!HS(st.tur)) n.push("Cariyi seçin; kayıt cariye işlenecek.");
+        if(["satis","alis"].includes(h.tur)&&!["satis","alis","hesap_giris","hesap_cikis"].includes(st.tur)) n.push("Gelir/gider türü ve KDV bilgisi kaldırılır.");
+        u.hidden=!d; if(d) u.innerHTML=`<b>${TUR[h.tur]}</b> → <b>${TUR[st.tur]}</b> olarak değişecek. ${n.join(" ")}`; } } });
   $("#i_kanal").addEventListener("change",e=>{ st.kanal=e.target.value; upd(); });
   $("#i_cari").addEventListener("change",e=>{ st.cari=e.target.value; $("#i_kur").value=""; upd(); });
   $("#i_hesap").addEventListener("change",()=>{ if(!CARI_TUR.includes(st.tur)) $("#i_kur").value=""; upd(); });
@@ -1537,7 +1543,7 @@ function islemForm(opt={}){
     if(t==="satis"||t==="alis"){ if(fd.kdv==="") delete rec.kdv; else rec.kdv=+fd.kdv; } else delete rec.kdv;
     if(!$("#i_ht").closest(".f").hidden){ const v=num(fd.hesapTutar); if(!(v>0)) return showErr("Hesaba geçen tutarı girin."); if(t==="virman") rec.hedefTutar=r2(v); else rec.hesapTutar=r2(v); }
     else { delete rec.hesapTutar; delete rec.hedefTutar; }
-    if(t==="virman") rec.hedefHesapId=fd.hedefHesapId;
+    if(t==="virman") rec.hedefHesapId=fd.hedefHesapId; else delete rec.hedefHesapId;
     if(!h) Object.assign(rec,stamp()); else rec.duzenleme={...stamp()};
     // çek / senet
     if(!h && ["cek","senet","kcek","ksenet"].includes(k)){
@@ -2433,22 +2439,50 @@ function topluSilModal(){
     `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button>${ok.length?`<button class="btn danger" id="tsGo">${ok.length} kaydı sil</button>`:""}</div>`);
   $("#tsGo")?.addEventListener("click",()=>{ for(const h of ok) if(S.data.hareketler[h.id]) hareketSilUygula(h); S.sec.clear(); closeModal(); changed(); toast(`${ok.length} kayıt silindi${atla.length?` · ${atla.length} kayıt atlandı`:""}`); });
 }
+/* kayıt türünü çevirir; olmazsa nedenini döndürür. cari/hes: toplu değiştirmede seçilen cari ve kasa-banka */
+const TC_CF=["satis","alis","borc_dekont","alacak_dekont"], TC_P=["tahsilat","odeme"], TC_HS=["hesap_giris","hesap_cikis"];
+function turCevir(h,yeni,cari,hes){
+  if(h.tur===yeni) return null;
+  const tum=[...TC_CF,...TC_P,...TC_HS];
+  if(!tum.includes(h.tur)||!tum.includes(yeni)) return "bu kayıtta tür değiştirilemez";
+  if(h.cekId||["cek","senet","kcek","ksenet","ciro"].includes(h.kanal)) return "çek/senede bağlı, tür değiştirilemedi";
+  const gy=t=>(t==="satis"||t==="hesap_giris")?"gelir":(t==="alis"||t==="hesap_cikis")?"gider":"";
+  const cid=h.cariId||cari, hid=TC_P.includes(h.tur)||TC_HS.includes(h.tur)?(h.hesapId||hes):hes;
+  if((TC_CF.includes(yeni)||TC_P.includes(yeni))&&!cid) return "cari seçilmediği için tür değiştirilemedi";
+  if((TC_P.includes(yeni)||TC_HS.includes(yeni))&&!hid) return "kasa/banka hesabı seçilmediği için tür değiştirilemedi";
+  const hx=hid?S.data.hesaplar[hid]:null, cx=cid?S.data.cariler[cid]:null;
+  if((TC_P.includes(yeni)||TC_HS.includes(yeni))&&hx&&(hx.doviz||"TRY")!==(h.doviz||"TRY")) return "para birimi farklı hesaba bağlanamadı";
+  if((TC_CF.includes(yeni)||TC_P.includes(yeni))&&!h.cariId&&cx&&(cx.doviz||"TRY")!==(h.doviz||"TRY")) return "para birimi farklı cariye bağlanamadı";
+  const eski=h.tur; h.tur=yeni;
+  if(TC_CF.includes(yeni)){ h.cariId=cid; delete h.hesapId; delete h.kanal; delete h.hesapTutar; h.vade=h.vade||""; }
+  if(TC_P.includes(yeni)){ h.cariId=cid; h.hesapId=hid; if(!TC_P.includes(eski)||!["nakit","banka","kk"].includes(h.kanal)) h.kanal=hx?.tip==="kasa"?"nakit":"banka"; delete h.vade; }
+  if(TC_HS.includes(yeni)){ delete h.cariId; h.hesapId=hid; delete h.kanal; delete h.vade; }
+  if(!["satis","alis"].includes(yeni)) delete h.kdv;
+  if(!gy(yeni)||gy(yeni)!==gy(eski)) delete h.kategori;
+  delete h.hedefHesapId; delete h.hedefTutar;
+  return null;
+}
 function topluDegistirModal(){
   const L=seciliKayitlar(); if(!L.length) return;
-  const cariVar=L.some(h=>h.cariId), turVar=L.some(h=>["satis","alis","hesap_giris","hesap_cikis"].includes(h.tur)), hesVar=L.some(h=>h.hesapId&&["tahsilat","odeme","hesap_giris","hesap_cikis"].includes(h.tur)&&!h.cekId);
+  const cariVar=true, turVar=true, hesVar=true;
   modal(`${L.length} kaydı değiştir`,`<form class="form" id="tdForm">
     <p class="hint f w" style="margin:0">Yalnızca doldurduğunuz alanlar değişir; boş bıraktıklarınız olduğu gibi kalır.</p>
-    ${cariVar?`<div class="f w"><label for="td_cari">Cariyi değiştir (başka cariye taşı)</label><select id="td_cari"><option value="">— değiştirme —</option>${sortedCariler().map(c=>`<option value="${c.id}">${esc(c.kod)} · ${esc(c.unvan)}${c.doviz!=="TRY"?" ("+c.doviz+")":""}</option>`).join("")}</select></div>`:""}
+    <div class="f w"><label for="td_itur">İşlem türünü düzelt</label><select id="td_itur"><option value="">— değiştirme —</option>${[...TC_CF,...TC_P,...TC_HS].map(t=>`<option value="${t}">${TUR[t]}</option>`).join("")}</select>
+      <span class="hint" id="td_iturBilgi">Seçilen kayıtların hepsi bu türe çevrilir.</span></div>
+    ${cariVar?`<div class="f w"><label for="td_cari">Cari <span class="muted" style="font-weight:400">(başka cariye taşı ya da tür çevirmede cari gerekirse)</span></label><select id="td_cari"><option value="">— değiştirme —</option>${sortedCariler().map(c=>`<option value="${c.id}">${esc(c.kod)} · ${esc(c.unvan)}${c.doviz!=="TRY"?" ("+c.doviz+")":""}</option>`).join("")}</select></div>`:""}
     <div class="f"><label for="td_tarih">Tarih</label><input type="date" id="td_tarih"></div>
-    ${hesVar?`<div class="f"><label for="td_hes">Kasa / banka hesabı</label><select id="td_hes"><option value="">— değiştirme —</option>${sortedHesaplar().map(x=>`<option value="${x.id}">${esc(x.ad)} (${x.doviz})</option>`).join("")}</select></div>`:""}
+    ${hesVar?`<div class="f"><label for="td_hes">Kasa / banka hesabı <span class="muted" style="font-weight:400">(tahsilat/ödemeye çevirirken gerekir)</span></label><select id="td_hes"><option value="">— değiştirme —</option>${sortedHesaplar().map(x=>`<option value="${x.id}">${esc(x.ad)} (${x.doviz})</option>`).join("")}</select></div>`:""}
     ${turVar?`<div class="f w"><label for="td_tur">Gelir / gider türü</label><input type="text" id="td_tur" list="tdTurList" placeholder="— değiştirme —"><datalist id="tdTurList">${[...turListe("gelir"),...turListe("gider")].map(t=>`<option value="${esc(t)}">`).join("")}</datalist><span class="hint">Yalnızca faturalara ve fatura dışı gelir/gider kayıtlarına uygulanır.</span></div>`:""}
     <div class="f w"><label for="td_ack">Açıklama</label><input type="text" id="td_ack" placeholder="— değiştirme —"></div>
     <p class="err" id="mErr" hidden></p></form>`,
     `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="tdForm">Uygula</button></div>`);
+  $("#td_itur").addEventListener("change",e=>{ const t=e.target.value, b=$("#td_iturBilgi"); if(!t){ b.textContent="Seçilen kayıtların hepsi bu türe çevrilir."; return; }
+    const ayni=L.filter(h=>h.tur===t).length, gerekH=(TC_P.includes(t)||TC_HS.includes(t))&&L.some(h=>!h.hesapId), gerekC=(TC_CF.includes(t)||TC_P.includes(t))&&L.some(h=>!h.cariId);
+    b.innerHTML=`${L.length-ayni} kayıt <b>${TUR[t]}</b> olarak düzeltilecek${ayni?` (${ayni} kayıt zaten bu türde)`:""}.${gerekH?" Kasa/banka hesabı olmayan kayıtlar için aşağıdan <b>hesap seçin</b>.":""}${gerekC?" Carisi olmayan kayıtlar için aşağıdan <b>cari seçin</b>.":""} Çek/senede bağlı ve kilitli kayıtlar atlanır.`; });
   $("#tdForm").addEventListener("submit",e=>{
     e.preventDefault();
-    const cari=$("#td_cari")?.value||"", tarih=$("#td_tarih").value, hes=$("#td_hes")?.value||"", tur=($("#td_tur")?.value||"").trim().replace(/\s+/g," "), ack=$("#td_ack").value.trim();
-    if(!cari&&!tarih&&!hes&&!tur&&!ack) return showErr("Değiştirmek için en az bir alan doldurun.");
+    const cari=$("#td_cari")?.value||"", tarih=$("#td_tarih").value, hes=$("#td_hes")?.value||"", tur=($("#td_tur")?.value||"").trim().replace(/\s+/g," "), ack=$("#td_ack").value.trim(), itur=$("#td_itur").value;
+    if(!cari&&!tarih&&!hes&&!tur&&!ack&&!itur) return showErr("Değiştirmek için en az bir alan doldurun.");
     if(tarih&&kilitli(tarih)) return showErr(`${trDate(S.kilit)} ve öncesi kilitli; bu tarihe taşınamaz.`);
     const hc=hes?S.data.hesaplar[hes]:null, cc=cari?S.data.cariler[cari]:null;
     let n=0; const atla=[];
@@ -2456,6 +2490,7 @@ function topluDegistirModal(){
       const h=S.data.hareketler[h0.id]; if(!h) continue;
       if(kilitli(h.tarih)){ atla.push("kilitli dönemde"); continue; }
       let deg=false;
+      if(itur&&h.tur!==itur){ const n=turCevir(h,itur,cari,hes); if(n) atla.push(n); else deg=true; }
       if(cc&&h.cariId&&h.cariId!==cari){ if(h.cekId) atla.push("çek/senede bağlı, cari değiştirilemedi"); else if((cc.doviz||"TRY")!==(h.doviz||"TRY")) atla.push("para birimi farklı cariye taşınamadı"); else { h.cariId=cari; deg=true; } }
       if(tarih&&h.tarih!==tarih){ h.tarih=tarih; deg=true; }
       if(hc&&h.hesapId&&h.hesapId!==hes&&["tahsilat","odeme","hesap_giris","hesap_cikis"].includes(h.tur)){
@@ -3171,7 +3206,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.7.6-önizleme";
+const SURUM="1.7.7-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
