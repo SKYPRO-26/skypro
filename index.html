@@ -129,6 +129,31 @@ tfoot td{font-weight:600;background:var(--surface-2);border-top:1px solid var(--
 .is-hizli input[type=text]{flex:1;min-width:220px}
 .is-hizli input.is-kisa{flex:0 1 190px;min-width:140px}
 .is-grp-h{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.tkv-bas{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 18px 10px;flex-wrap:wrap}
+.tkv-bas h3{margin:0;font-size:16px}
+.tkv{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.tkv .gh{padding:6px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--surface-2);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.tkv .gun{min-height:96px;padding:5px 6px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface);cursor:pointer;display:flex;flex-direction:column;gap:3px;text-align:left;font:inherit;color:inherit;min-width:0}
+.tkv .gun:hover{background:var(--surface-2)}
+.tkv .gun.dis{opacity:.45}
+.tkv .gun.hs{background:color-mix(in srgb,var(--surface-2) 60%,var(--surface))}
+.tkv .gun.tatil .no{color:var(--borc)}
+.tkv .gun.bugun .no{background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:0 6px}
+.tkv .gun.sec{outline:2px solid var(--accent);outline-offset:-2px}
+.tkv .no{font-size:12px;font-weight:600;align-self:flex-start}
+.tkv .tt{font-size:10px;color:var(--borc);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tkv .ci{font-size:11px;line-height:1.25;padding:1px 5px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--muted);background:var(--surface-2)}
+.tkv .ci.r{border-left-color:#d64535;background:rgba(214,69,53,.12)} .tkv .ci.o{border-left-color:#e07b1f;background:rgba(224,123,31,.12)}
+.tkv .ci.y{border-left-color:#d7b10f;background:rgba(215,177,15,.13)} .tkv .ci.g{border-left-color:#3a9a5c;background:rgba(58,154,92,.10)}
+.tkv .ci.bt{text-decoration:line-through;opacity:.6}
+.tkv .daha{font-size:11px;color:var(--muted)}
+.tkv-gun-bas{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 18px 8px;border-top:1px solid var(--line);flex-wrap:wrap}
+.vt-matris{max-height:420px;overflow:auto}
+.vt-matris td{white-space:nowrap}
+.vt-matris th.c{white-space:normal;font-size:10px;line-height:1.2;padding:6px 4px;min-width:52px}
+.vt-matris td.c,.vt-matris th.c{text-align:center}
+@media (max-width:700px){.tkv .gun{min-height:58px}.tkv .ci{display:none}.tkv .gun .say{display:inline-block}}
+.tkv .say{display:none;font-size:10px;font-weight:700;color:var(--accent)}
 .is-grp-h:hover{color:var(--ink)}
 .is-grp-h .ok{font-size:10px;width:10px}
 .is-grp li{border-left:4px solid transparent}
@@ -1352,7 +1377,7 @@ function modal(title,body,foot){
   o.innerHTML=`<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2><button class="x" data-act="close" aria-label="Kapat">×</button></header>${body}${foot?`<footer>${foot}</footer>`:""}</div>`;
   o.hidden=false; setTimeout(()=>o.querySelector("input:not([type=hidden]),select")?.focus(),30);
 }
-function closeModal(){ $("#overlay").hidden=true; $("#overlay").innerHTML="";
+function closeModal(){ $("#overlay").hidden=true; $("#overlay").innerHTML=""; S._vtTaslak=null;
   if(S._hgPark){ const {el,fr}=S._hgPark; S._hgPark=null; if(el.isConnected&&!el.firstChild) el.appendChild(fr); } }
 $("#overlay").addEventListener("mousedown",e=>{ if(e.target.id==="overlay") closeModal(); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!$("#overlay").hidden) closeModal(); if(e.key==="Enter"&&e.target.matches?.("tr[tabindex]")) e.target.click(); });
@@ -2634,8 +2659,129 @@ const kullaniciAd = u => S.data?.kullanicilar?.[u]?.adSoyad||u||"";
 function isIleri(t,tekrar){ if(!t) return t; const [y,m,d]=t.split("-").map(Number), ay={ay:1,ceyrek:3,yil:12}[tekrar];
   if(tekrar==="hafta") return addDays(t,7);
   const son=new Date(y,m-1+ay+1,0).getDate(); const n=new Date(y,m-1+ay,Math.min(d,son)); return iso(n); }
+/* resmi tatiller (tam gün) — vergi son günleri hafta sonu/tatile denk gelirse ilk iş gününe kayar (VUK 18) */
+const TATIL={"2026-01-01":"Yılbaşı","2026-03-20":"Ramazan Bayramı","2026-03-21":"Ramazan Bayramı","2026-03-22":"Ramazan Bayramı","2026-04-23":"23 Nisan","2026-05-01":"1 Mayıs","2026-05-19":"19 Mayıs","2026-05-27":"Kurban Bayramı","2026-05-28":"Kurban Bayramı","2026-05-29":"Kurban Bayramı","2026-05-30":"Kurban Bayramı","2026-07-15":"15 Temmuz","2026-08-30":"Zafer Bayramı","2026-10-29":"Cumhuriyet Bayramı",
+  "2027-01-01":"Yılbaşı","2027-03-09":"Ramazan Bayramı","2027-03-10":"Ramazan Bayramı","2027-03-11":"Ramazan Bayramı","2027-04-23":"23 Nisan","2027-05-01":"1 Mayıs","2027-05-16":"Kurban Bayramı","2027-05-17":"Kurban Bayramı","2027-05-18":"Kurban Bayramı","2027-05-19":"Kurban Bayramı / 19 Mayıs","2027-07-15":"15 Temmuz","2027-08-30":"Zafer Bayramı","2027-10-29":"Cumhuriyet Bayramı"};
+const isGunuMu = d => { const g=new Date(d+"T12:00:00").getDay(); return g!==0&&g!==6&&!TATIL[d]; };
+const ilkIsGunu = d => { let x=d, n=0; while(!isGunuMu(x)&&n++<15) x=addDays(x,1); return x; };
+const ayGunT = (ym,g) => g==="son"?aySonu(ym):ym+"-"+String(g).padStart(2,"0");
+/* vergi takvimi kuralları. ay: beyanın ait olduğu dönem (YYYY-MM); son: son günün ham tarihi */
+const VT_TUR=[
+  {k:"KDV",kisa:"KDV",ad:"KDV beyannamesi",grup:"KDV",kural:"Dönemi izleyen ayın 28'i",siklik:"ay",son:ay=>ayGunT(ayKaydir(ay,1),28),vars:true},
+  {k:"KDV2",kisa:"KDV-2",ad:"KDV-2 (tevkifat) beyannamesi",kural:"Dönemi izleyen ayın 25'i",siklik:"ay",son:ay=>ayGunT(ayKaydir(ay,1),25),grup:"KDV"},
+  {k:"MUH",kisa:"Muhtasar",ad:"Muhtasar ve prim hizmet beyannamesi",kural:"Aylık: dönemi izleyen ayın 26'sı",siklik:"ay",son:ay=>ayGunT(ayKaydir(ay,1),26),vars:true,grup:"Muhtasar"},
+  {k:"MUH3",kisa:"Muhtasar 3 aylık",ad:"Muhtasar beyannamesi (3 aylık)",kural:"Çeyreği izleyen ayın 26'sı (Ocak, Nisan, Temmuz, Ekim)",siklik:"ceyrek",q4:true,son:ay=>ayGunT(ayKaydir(ay,1),26),grup:"Muhtasar"},
+  {k:"DMG",kisa:"Damga",ad:"Damga vergisi beyannamesi",kural:"Dönemi izleyen ayın 26'sı",siklik:"ay",son:ay=>ayGunT(ayKaydir(ay,1),26),grup:"Damga"},
+  {k:"BABS",kisa:"Ba-Bs",ad:"Ba-Bs formları",kural:"Dönemi izleyen ayın son günü",siklik:"ay",son:ay=>aySonu(ayKaydir(ay,1)),vars:true,grup:"Ba-Bs"},
+  {k:"SGK",kisa:"SGK prim",ad:"SGK prim ödemesi",kural:"Dönemi izleyen ayın son günü",siklik:"ay",son:ay=>aySonu(ayKaydir(ay,1))},
+  {k:"EDF",kisa:"e-Defter",ad:"e-Defter berat yükleme",kural:"3 aylık: şahıs çeyreği izleyen 3. ayın 10'u (4. dönem Nisan 10) · sermaye şirketi 14'ü (4. dönem Mayıs 14)",siklik:"edefter",vars:true,grup:"e-Defter"},
+  {k:"GV",kisa:"Geçici",ad:"Geçici vergi beyannamesi",kural:"Çeyreği izleyen 2. ayın 17'si (1.–3. dönem)",siklik:"ceyrek",son:ay=>ayGunT(ayKaydir(ay,2),17),grup:"Geçici vergi"},
+  {k:"YGV",kisa:"Yıllık gelir",ad:"Yıllık gelir vergisi beyannamesi",kural:"Mart sonu",siklik:"yil",son:y=>`${+y+1}-03-31`,grup:"Gelir vergisi"},
+  {k:"KV",kisa:"Kurumlar",ad:"Kurumlar vergisi beyannamesi",kural:"Nisan sonu",siklik:"yil",son:y=>`${+y+1}-04-30`,grup:"Kurumlar vergisi"},
+  {k:"EML",kisa:"Emlak",ad:"Emlak vergisi taksiti",kural:"Mayıs ve Kasım sonu",siklik:"ozel",tarihler:y=>[[`${y}-05-31`,"1. taksit"],[`${y}-11-30`,"2. taksit"]],grup:"Emlak vergisi"},
+  {k:"MTV",kisa:"MTV",ad:"Motorlu taşıtlar vergisi taksiti",kural:"Ocak ve Temmuz sonu",siklik:"ozel",tarihler:y=>[[`${y}-01-31`,"1. taksit"],[`${y}-07-31`,"2. taksit"]],grup:"MTV"}];
+// [bas,bit] aralığında son günü düşen yükümlülükler: {tur, donem, donemAd, ham, son}
+function vtListe(bas,bit){ const out=[], y0=+bas.slice(0,4)-1, y1=+bit.slice(0,4);
+  const ekle=(t,donem,donemAd,ham)=>{ const son=ilkIsGunu(ham); if(son>=bas&&son<=bit) out.push({tur:t,donem,donemAd,ham,son}); };
+  for(const t of VT_TUR){
+    if(t.siklik==="ay"){ for(let ay=`${y0}-01`;ay<=bit.slice(0,7);ay=ayKaydir(ay,1)) ekle(t,ay,ayTam(ay),t.son(ay)); }
+    else if(t.siklik==="edefter"){ for(let y=y0;y<=y1;y++) for(const [q,ay] of [[1,"03"],[2,"06"],[3,"09"],[4,"12"]]) for(const mt of ["sahis","sermaye"]){
+        const ham=q<4?ayGunT(ayKaydir(`${y}-${ay}`,3),mt==="sahis"?10:14):(mt==="sahis"?`${y+1}-04-10`:`${y+1}-05-14`);
+        const son=ilkIsGunu(ham); if(son>=bas&&son<=bit) out.push({tur:t,donem:`${y}-Q${q}`,donemAd:`${y} ${q}. dönem`,ham,son,mt}); } }
+    else if(t.siklik==="ceyrek"){ for(let y=y0;y<=y1;y++) for(const [q,ay] of [[1,"03"],[2,"06"],[3,"09"],...(t.q4?[[4,"12"]]:[])]) ekle(t,`${y}-Q${q}`,`${y} ${q}. dönem`,t.son(`${y}-${ay}`)); }
+    else if(t.siklik==="yil"){ for(let y=y0;y<=y1;y++) ekle(t,String(y),`${y} yılı`,t.son(String(y))); }
+    else if(t.siklik==="ozel"){ for(let y=y0;y<=y1+1;y++) for(const [d,ad] of t.tarihler(y)) ekle(t,`${y}-${ad}`,`${y} ${ad}`,d); } }
+  return out.sort((a,b)=>a.son.localeCompare(b.son)||a.tur.ad.localeCompare(b.tur.ad,"tr")); }
+const vtKayitli = () => S.data.vergiProfil||(S.data.vergiProfil={});
+const vtProfil = () => S._vtTaslak||vtKayitli(); // işaret taslağı varsa (onay bekleyen) onu kullanır
+const vtTurlerP = (P,cid) => { const p=P[cid]; return p?VT_TUR.filter(t=>p[t.k]):VT_TUR.filter(t=>t.vars); };
+const MT_AD={sahis:"Şahıs",sermaye:"Sermaye şirketi"};
+const vtMtTahmin = c => { const u=" "+(c?.unvan||"").toLocaleUpperCase("tr").replace(/[.,;:()\-]/g," ").replace(/\s+/g," ")+" ";
+  return /( LTD | LİMİTED | ŞTİ | STİ | A Ş | AŞ | ANONİM | KOOP)/.test(u)?"sermaye":"sahis"; };
+const vtMt = cid => vtProfil()[cid]?.mt||vtMtTahmin(S.cariler.get(cid));
+const vtMukellefler = () => sortedCariler().filter(c=>["musteri","ikisi"].includes(c.tip)||vtProfil()[c.id]);
+const VT_KARSIT={MUH:"MUH3",MUH3:"MUH"}; // aylık ve 3 aylık muhtasar birlikte seçilmez
+function vtCariTurleri(cid){ const p=vtProfil()[cid]; if(p) return VT_TUR.filter(t=>p[t.k]); return VT_TUR.filter(t=>t.vars); }
+/* vergi takvimi: her ayın iş listesi ayrı ayrı onaylanır; işaretler mükellef bazında saklanır, sonraki aylara aynen gelir */
+const vtOnay = () => S.data.vtOnay||(S.data.vtOnay={});
+const vtUyar = (v,c) => !v.mt||v.mt===vtMt(c.id);
+function vtAyIsleri(ay,gecmisAtla){
+  const V=vtListe(ay+"-01",aySonu(ay)).filter(v=>!gecmisAtla||v.son>=TODAY), M=vtMukellefler(), var_=new Set(isListe().map(x=>x.vergiKey).filter(Boolean));
+  const yeni=[], mevcut=[];
+  for(const v of V) for(const c of M) if(vtCariTurleri(c.id).includes(v.tur)&&vtUyar(v,c)){ const key=`${v.tur.k}|${v.donem}|${c.id}`; (var_.has(key)?mevcut:yeni).push({v,c,key}); }
+  return {V,M,yeni,mevcut};
+}
+function vergiTakvimiModal(){
+  const f=typeof S.view.vt?.ay==="string"?S.view.vt:(S.view.vt={ay:TODAY.slice(0,7),gecmis:false,detay:true});
+  const buAy=TODAY.slice(0,7), atla=()=>f.ay===buAy&&!f.gecmis;
+  modal("Vergi takviminden iş oluştur",`<div style="display:flex;flex-direction:column;gap:12px;padding:16px 20px"><div class="vt-aylar" id="vtAylar"></div><div id="vtGovde" style="display:flex;flex-direction:column;gap:12px"></div></div>`,
+    `<span class="small muted" id="vtDurum"></span><div class="btns"><button class="btn" data-act="close">Kapat</button><button class="btn pri" id="vtGo" data-w></button></div>`);
+  const sh=$("#overlay .sheet"); sh.style.maxWidth="min(1200px,96vw)"; sh.style.width="100%";
+  const taslak=()=>S._vtTaslak||(S._vtTaslak=JSON.parse(JSON.stringify(vtKayitli())));
+  const fark=()=>{ if(!S._vtTaslak) return {n:0,h:new Set()}; const K=vtKayitli(), h=new Set();
+    for(const c of vtMukellefler()){ const a=vtTurlerP(K,c.id), b=vtTurlerP(S._vtTaslak,c.id);
+      for(const t of VT_TUR) if(a.includes(t)!==b.includes(t)) h.add(c.id+"|"+t.k);
+      if((K[c.id]?.mt||vtMtTahmin(c))!==(S._vtTaslak[c.id]?.mt||vtMtTahmin(c))) h.add(c.id+"|mt"); }
+    return {n:h.size,h}; };
+  const profilYaz=cid=>{ const P=taslak(); if(!P[cid]) P[cid]=Object.fromEntries(VT_TUR.filter(t=>t.vars).map(t=>[t.k,true])); return P[cid]; };
+  const isaretle=(p,k,on)=>{ if(on){ p[k]=true; if(VT_KARSIT[k]) delete p[VT_KARSIT[k]]; } else delete p[k]; };
+  const ciz=()=>{
+    const {V,M,yeni,mevcut}=vtAyIsleri(f.ay,atla()), P=vtKayitli(), O=vtOnay()[f.ay], F=fark(), DG=' style="background:#fff1c2"';
+    // kaydırma ve odak korunur: işaretleme sonrası sayfa yukarı atlamaz
+    const mat=$("#vtGovde .vt-matris"), lst=$("#vtGovde .vt-liste"), sk=mat?[mat.scrollTop,mat.scrollLeft]:null, sl=lst?.scrollTop, ov=$("#overlay").scrollTop;
+    const a=document.activeElement, d=a?.dataset||{};
+    const odak=d.vtc?`[data-vtc="${d.vtc}"][data-vtt="${d.vtt}"]`:d.vtsutun?`[data-vtsutun="${d.vtsutun}"]`:d.vtmt?`[data-vtmt="${d.vtmt}"]`:d.vtay?`[data-vtay="${d.vtay}"]`:a?.id?"#"+a.id:"";
+    // ay şeridi: bu aydan itibaren 6 ay + seçili ay
+    const aylar=[...new Set([...Array.from({length:6},(_,i)=>ayKaydir(buAy,i)),f.ay])].sort();
+    $("#vtAylar").innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><button class="btn sm" data-vtay="${ayKaydir(f.ay,-1)}" aria-label="Önceki ay">‹</button>
+      ${aylar.map(ay=>{ const r=vtAyIsleri(ay,ay===buAy&&!f.gecmis), o=vtOnay()[ay], dur=o?(r.yeni.length?`<span style="color:#b26a00">✓ +${r.yeni.length} yeni</span>`:`<span style="color:var(--alacak,#2e7d32)">✓ onaylı</span>`):(r.yeni.length?`<span class="muted">${r.yeni.length} iş bekliyor</span>`:`<span class="muted">iş yok</span>`);
+        return `<button class="btn sm${ay===f.ay?" pri":""}" data-vtay="${ay}" aria-pressed="${ay===f.ay}" style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.25;padding:5px 10px"><b>${ayTam(ay)}</b><span style="font-size:11px">${ay===f.ay?`<span style="color:inherit;opacity:.9">${o?(r.yeni.length?`✓ +${r.yeni.length} yeni`:"✓ onaylı"):(r.yeni.length?`${r.yeni.length} iş bekliyor`:"iş yok")}</span>`:dur}</span></button>`; }).join("")}
+      <button class="btn sm" data-vtay="${ayKaydir(f.ay,1)}" aria-label="Sonraki ay">›</button></div>`;
+    const grp=new Map(); for(const v of V) grp.set(v,{y:[],m:[]}); for(const x of yeni) grp.get(x.v).y.push(x.c); for(const x of mevcut) grp.get(x.v).m.push(x.c);
+    const adlar=L=>L.length<=3?L.map(c=>esc(c.unvan)).join(", "):L.slice(0,3).map(c=>esc(c.unvan)).join(", ")+` <span class="muted">+${L.length-3}</span>`;
+    $("#vtGovde").innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">${ayTam(f.ay)} iş listesi</h3>
+        ${O?`<span class="pill" style="background:#e3f3e6;color:#1d6b2f">✓ Onaylandı · ${trDate(iso(new Date(O.at)))}${O.by?" · "+esc(kullaniciAd(O.by)):""} · ${O.n} iş</span>`:`<span class="pill" style="background:#fff3dc;color:#8a5200">Onay bekliyor</span>`}</div>
+      ${f.ay===buAy?`<label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="vt_gecmis" ${f.gecmis?"checked":""}> Bugünden önce son günü geçmiş yükümlülükleri de listeye al</label>`:""}
+      <details id="vtDetay" ${f.detay?"open":""}><summary class="small"><b>${V.length} son gün</b> bu ayda · ${yeni.length} iş oluşturulacak${mevcut.length?` · ${mevcut.length} iş zaten var`:""} — listeyi ${f.detay?"gizle":"gör"}</summary>
+        <div class="tw vt-liste" style="max-height:240px;overflow:auto;margin-top:6px"><table><thead><tr><th>Son gün</th><th>Yükümlülük</th><th>Dönem</th><th>Oluşturulacak</th></tr></thead><tbody>
+        ${V.map(v=>{ const g=grp.get(v); return `<tr${g.y.length?"":` style="opacity:.55"`}><td class="mono small">${trDate(v.son)}${v.son!==v.ham?` <span class="muted" title="${trDate(v.ham)} tatil/hafta sonu">↷</span>`:""}</td><td class="small">${esc(v.tur.ad)}${v.mt?` <span class="muted">(${MT_AD[v.mt].toLocaleLowerCase("tr")})</span>`:""}</td><td class="small">${esc(v.donemAd)}</td>
+          <td class="small">${g.y.length?`<b>${g.y.length}</b> · ${adlar(g.y)}`:`<span class="muted">${g.m.length?"":"takip eden mükellef yok"}</span>`}${g.m.length?` <span class="muted">(${g.m.length} zaten var)</span>`:""}</td></tr>`; }).join("")}</tbody></table></div></details>
+      <div>${F.n?`<div class="notice warn small" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;position:sticky;top:0;z-index:3"><span><b>${F.n} işaret değişikliği onay bekliyor.</b> Sarı hücreler değişti; yukarıdaki sayılar bu işaretlere göre. Onaylamadan pencereyi kapatırsanız değişiklikler kaydedilmez.</span><span class="btns"><button class="btn sm" id="vtIsVaz">Vazgeç</button><button class="btn sm pri" id="vtIsOnay" data-w>İşaretleri onayla</button></span></div>`:""}
+      <div class="small" style="margin-bottom:6px"><b>Mükellef × yükümlülük</b> — işaretledikten sonra "İşaretleri onayla" ile kaydedin; kaydedilen işaretler mükellef bazında saklanır ve sonraki aylara aynen gelir. Aylık ve 3 aylık muhtasardan biri seçilebilir.</div>
+      ${M.length?`<div class="tw vt-matris"><table><thead><tr><th>Mükellef</th><th>Tür</th>${VT_TUR.map(t=>`<th class="c" title="${esc(t.ad)} · ${esc(t.kural)}"><label style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer"><span>${esc(t.kisa)}</span><input type="checkbox" data-vtsutun="${t.k}" ${M.every(c=>vtCariTurleri(c.id).includes(t))?"checked":""} aria-label="${esc(t.ad)}: tüm mükellefler"></label></th>`).join("")}</tr></thead><tbody>
+        ${M.map(c=>{ const T=vtCariTurleri(c.id); return `<tr><td class="small">${esc(c.kod)} · ${esc(c.unvan)}${P[c.id]?"":` <span class="pill" title="Henüz işaretlenmedi; varsayılan KDV, muhtasar, Ba-Bs, e-Defter">varsayılan</span>`}</td>
+          <td${F.h.has(c.id+"|mt")?DG:""}><select data-vtmt="${c.id}" style="font-size:12px;padding:3px 6px" aria-label="${esc(c.unvan)} mükellef türü">${Object.entries(MT_AD).map(([k,v])=>`<option value="${k}" ${vtMt(c.id)===k?"selected":""}>${v}</option>`).join("")}</select></td>${VT_TUR.map(t=>`<td class="c"${F.h.has(c.id+"|"+t.k)?DG+` title="Değişti, onay bekliyor"`:""}><input type="checkbox" data-vtc="${c.id}" data-vtt="${t.k}" ${T.includes(t)?"checked":""} aria-label="${esc(c.unvan)} ${esc(t.ad)}"></td>`).join("")}</tr>`; }).join("")}</tbody></table></div>`
+      :`<div class="notice small">Mükellef listesi boş. Cari hesaplarda müşteri tipinde cari açın.</div>`}</div>
+      <div class="notice small">${O?(yeni.length?`Bu ayın listesi onaylanmıştı; sonradan yapılan işaretlemelerle <b>${yeni.length} yeni iş</b> eklenebilir.`:`Bu ayın listesi onaylandı, eklenecek iş kalmadı. Sonraki aya geçmek için yukarıdan ayı seçin.`):`Onayladığınızda <b>${ayTam(f.ay)}</b> ayında son günü olan <b>${yeni.length} iş</b> oluşturulur. Diğer aylar ayrıca onay ister.`}</div>
+      <p class="small muted" style="margin:0">Kurallar GİB vergi takvimine göre programa işlendi; 2026–2027 resmi tatilleri dahil. GİB'in duyurduğu süre uzatmaları kendiliğinden gelmez: uzatma olduğunda işin termin tarihini değiştirin.</p>`;
+    const go=$("#vtGo"); go.disabled=!yeni.length||!S.canWrite||F.n>0; go.title=F.n?"Önce işaret değişikliklerini onaylayın":"";
+    go.textContent=F.n?"Önce işaretleri onaylayın":yeni.length?(O?`${yeni.length} yeni işi ekle`:`${ayTam(f.ay)} listesini onayla · ${yeni.length} iş`):(O?"Onaylandı ✓":"Oluşturulacak iş yok");
+    $("#vtDurum").textContent=F.n?`${F.n} işaret değişikliği onay bekliyor`:O?"":`${ayTam(f.ay)} için onay bekleniyor`;
+    const m2=$("#vtGovde .vt-matris"); if(m2&&sk){ m2.scrollTop=sk[0]; m2.scrollLeft=sk[1]; }
+    const l2=$("#vtGovde .vt-liste"); if(l2&&sl!=null) l2.scrollTop=sl;
+    $("#overlay").scrollTop=ov;
+    if(odak) $("#overlay").querySelector(odak)?.focus({preventScroll:true});
+  };
+  sh.addEventListener("click",e=>{ const b=e.target.closest("[data-vtay]"); if(b){ f.ay=b.dataset.vtay; ciz(); }
+    if(e.target.id==="vtIsVaz"){ S._vtTaslak=null; ciz(); toast("İşaret değişiklikleri geri alındı"); }
+    if(e.target.id==="vtIsOnay"){ const n=fark().n; S.data.vergiProfil=S._vtTaslak; S._vtTaslak=null; scheduleSave(); ciz(); toast(`${n} işaret değişikliği kaydedildi`); } });
+  sh.addEventListener("toggle",e=>{ if(e.target.id==="vtDetay"){ f.detay=e.target.open; const s2=e.target.querySelector("summary"); if(s2) s2.innerHTML=s2.innerHTML.replace(/listeyi (gizle|gör)$/,"listeyi "+(f.detay?"gizle":"gör")); } },true);
+  sh.addEventListener("change",e=>{ const el=e.target, d=el.dataset;
+    if(el.id==="vt_gecmis"){ f.gecmis=el.checked; return ciz(); }
+    if(d.vtc){ isaretle(profilYaz(d.vtc),d.vtt,el.checked); }
+    else if(d.vtmt){ profilYaz(d.vtmt).mt=el.value; }
+    else if(d.vtsutun){ for(const c of vtMukellefler()) isaretle(profilYaz(c.id),d.vtsutun,el.checked); }
+    else return;
+    ciz(); });
+  $("#vtGo").addEventListener("click",()=>{ if(fark().n) return; S._vtTaslak=null; const {yeni}=vtAyIsleri(f.ay,atla()); if(!yeni.length) return; const st=stamp();
+    for(const {v,c,key} of yeni){ const t=v.tur, id=uid("is");
+      isler()[id]={id,baslik:`${t.ad} · ${v.donemAd}`,firma:c.unvan,cariId:c.id,grup:t.grup||t.k,sonTarih:v.son,oncelik:"normal",durum:"acik",aciklama:`Vergi takvimi: ${t.ad}, ${v.donemAd}. Son gün ${trDate(v.son)}${v.son!==v.ham?` (${trDate(v.ham)} tatil/hafta sonu olduğu için)`:""}.`,vergiKey:key,kaynak:"vergi",vtAy:f.ay,...st}; }
+    const O=vtOnay(); O[f.ay]={...st,n:(O[f.ay]?.n||0)+yeni.length};
+    changed(); toast(`${ayTam(f.ay)}: ${yeni.length} iş oluşturuldu`); ciz(); });
+  ciz();
+}
 /* görünüm tercihleri: kişiye özel, bu bilgisayarda saklanır */
-const IS_GORUNUM_VARS={grupla:"termin",kalan:true,renk:true,turuncu:3,sari:7};
+const IS_GORUNUM_VARS={grupla:"termin",kalan:true,renk:true,turuncu:3,sari:7,mod:"liste"};
 function isGorunum(){ if(!S._isG){ let g={}; try{ g=JSON.parse(localStorage.getItem("skypro_isgorunum")||"{}"); }catch{} S._isG={...IS_GORUNUM_VARS,...g}; } return S._isG; }
 function isGorunumKaydet(){ try{ localStorage.setItem("skypro_isgorunum",JSON.stringify(S._isG)); }catch{} }
 const IS_GRUPLA={termin:"Termin tarihine göre",firma:"Firmaya göre",grup:"İş grubuna göre",sorumlu:"Sorumluya göre",oncelik:"Önceliğe göre",yok:"Gruplama yok"};
@@ -2659,6 +2805,26 @@ function isSatir(x){
   ${ac?`<li class="is-not-li"><div class="is-not"><label for="isNot" class="small"><b>Notlar</b> <span class="muted" id="isNotSt">${x.notGuncelleme?`son değişiklik ${(d=>trDate(iso(d))+" "+pad(d.getHours())+":"+pad(d.getMinutes()))(new Date(x.notGuncelleme.at))}${x.notGuncelleme.by?" · "+esc(kullaniciAd(x.notGuncelleme.by)):""}`:"yazdıkça kaydedilir"}</span></label>
     <textarea id="isNot" data-id="${x.id}" rows="5" placeholder="Bu işle ilgili notlarınızı yazın: kiminle görüşüldü, ne eksik, nerede kaldı…" ${S.canWrite?"":"readonly"}>${esc(x.not||"")}</textarea></div></li>`:""}`;
 }
+const GUN_K=["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"];
+function isTakvim(L,f){
+  const ay=f.tkAy||(f.tkAy=TODAY.slice(0,7)), ilk=ay+"-01", bos=(new Date(ilk+"T12:00:00").getDay()+6)%7, bas=addDays(ilk,-bos);
+  const son=aySonu(ay), gunSay=Math.ceil((bos+ +son.slice(8))/7)*7;
+  const G=new Map(); for(const x of L) if(x.sonTarih){ if(!G.has(x.sonTarih)) G.set(x.sonTarih,[]); G.get(x.sonTarih).push(x); }
+  const ONC={yuksek:0,normal:1,dusuk:2}, sir=(a,b)=>(a.durum==="bitti")-(b.durum==="bitti")||ONC[a.oncelik||"normal"]-ONC[b.oncelik||"normal"]||(a.at||"").localeCompare(b.at||"");
+  const sec=f.tkGun&&f.tkGun.slice(0,7)===ay?f.tkGun:(ay===TODAY.slice(0,7)?TODAY:"");
+  let h=`<div class="tkv-bas"><div style="display:flex;gap:6px;align-items:center"><button class="btn sm" data-act="isTkAy" data-n="-1" aria-label="Önceki ay">‹</button><h3>${ayTam(ay)}</h3><button class="btn sm" data-act="isTkAy" data-n="1" aria-label="Sonraki ay">›</button>${ay!==TODAY.slice(0,7)?`<button class="btn sm" data-act="isTkAy" data-n="0">Bugün</button>`:""}</div>
+    <span class="small muted">${L.filter(x=>x.sonTarih&&x.sonTarih.slice(0,7)===ay).length} iş bu ay${L.some(x=>!x.sonTarih)?` · ${L.filter(x=>!x.sonTarih).length} tarihsiz iş liste görünümünde`:""}</span></div>
+  <div class="tkv" role="grid">${GUN_K.map(g=>`<div class="gh">${g}</div>`).join("")}`;
+  for(let i=0;i<gunSay;i++){ const d=addDays(bas,i), X=(G.get(d)||[]).sort(sir), hs=[5,6].includes(i%7);
+    h+=`<button type="button" class="gun${d.slice(0,7)!==ay?" dis":""}${hs?" hs":""}${TATIL[d]?" tatil":""}${d===TODAY?" bugun":""}${d===sec?" sec":""}" data-act="isGun" data-g="${d}" aria-label="${trDate(d)} · ${X.length} iş">
+      <span class="no">${+d.slice(8)}</span>${TATIL[d]?`<span class="tt">${esc(TATIL[d])}</span>`:""}${X.length?`<span class="say">${X.length} iş</span>`:""}
+      ${X.slice(0,3).map(x=>`<span class="ci ${x.durum==="bitti"?"bt":isRenk(x)}" title="${esc((isFirma(x)?isFirma(x)+" — ":"")+x.baslik)}">${esc(isFirma(x)?isFirma(x).split(" ")[0]+" · ":"")}${esc(x.baslik)}</span>`).join("")}${X.length>3?`<span class="daha">+${X.length-3} daha</span>`:""}</button>`; }
+  h+=`</div>`;
+  if(sec){ const X=(G.get(sec)||[]).sort(sir);
+    h+=`<div class="tkv-gun-bas"><b>${trDate(sec)} ${GUN_K[(new Date(sec+"T12:00:00").getDay()+6)%7]}${TATIL[sec]?` · <span style="color:var(--borc)">${esc(TATIL[sec])}</span>`:""} · ${X.length} iş</b>${S.canWrite?`<button class="btn sm" data-act="isForm" data-gun="${sec}">+ Bu güne iş ekle</button>`:""}</div>
+      ${X.length?`<ul class="is-grp">${X.map(isSatir).join("")}</ul>`:`<div class="pad small muted">Bu günde iş yok.</div>`}`; }
+  return h;
+}
 function vIsler(){
   const f=S.view.is||(S.view.is={durum:"acik",q:"",kim:"",firma:"",kapali:{}}); f.kapali=f.kapali||{};
   const GV=isGorunum(), q=f.q.trim().toLocaleLowerCase("tr");
@@ -2669,7 +2835,8 @@ function vIsler(){
   const acik=isListe().filter(x=>x.durum!=="bitti"), gec=acik.filter(x=>x.sonTarih&&x.sonTarih<TODAY).length, bug=acik.filter(x=>x.sonTarih===TODAY).length;
   const ONC={yuksek:0,normal:1,dusuk:2};
   let govde;
-  if(!L.length) govde=`<div class="pad muted">${isListe().length?"Bu filtreye uyan iş yok.":"Henüz iş eklenmedi. Yukarıdaki kutuya yazıp Enter'a basarak ilk işinizi ekleyin."}</div>`;
+  if(GV.mod==="takvim") govde=isTakvim(L,f);
+  else if(!L.length) govde=`<div class="pad muted">${isListe().length?"Bu filtreye uyan iş yok.":"Henüz iş eklenmedi. Yukarıdaki kutuya yazıp Enter'a basarak ilk işinizi ekleyin."}</div>`;
   else if(f.durum==="bitti") govde=`<ul class="is-grp">${L.sort((a,b)=>(b.bitis?.at||"").localeCompare(a.bitis?.at||"")).map(isSatir).join("")}</ul>`;
   else {
     const sir=(a,b)=>(a.sonTarih||"9").localeCompare(b.sonTarih||"9")||ONC[a.oncelik||"normal"]-ONC[b.oncelik||"normal"]||(a.at||"").localeCompare(b.at||"");
@@ -2701,13 +2868,14 @@ function vIsler(){
       <input type="search" id="isQ" placeholder="Ara: iş, firma, grup, açıklama" value="${esc(f.q)}" style="max-width:240px">
       ${(()=>{ const F=[...new Set(isListe().map(isFirma).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"tr")); return F.length?`<select id="isFirmaSz" aria-label="Firma" style="max-width:220px"><option value="">Tüm firmalar</option>${F.map(v=>`<option value="${esc(v)}" ${f.firma===v?"selected":""}>${esc(v)}</option>`).join("")}<option value="-" ${f.firma==="-"?"selected":""}>Firma belirtilmemiş</option></select>`:""; })()}
       <label class="small" style="display:flex;align-items:center;gap:6px;flex-direction:row">Grupla <select id="isGrupla" aria-label="Gruplandırma">${Object.entries(IS_GRUPLA).map(([k,v])=>`<option value="${k}" ${GV.grupla===k?"selected":""}>${v}</option>`).join("")}</select></label>
+      <div class="seg" role="group" aria-label="Görünüm">${[["liste","☰ Liste"],["takvim","📅 Takvim"]].map(([k,v])=>`<button type="button" aria-pressed="${GV.mod===k}" data-act="isMod" data-k="${k}">${v}</button>`).join("")}</div>
       <button type="button" class="btn" data-act="isGorunumAc" title="Kalan süre ve renk ayarları">🎨 Görünüm</button>
       ${kul.length>1?`<select id="isKim" aria-label="Kişi"><option value="">Herkes</option>${kul.map(u=>`<option value="${esc(u)}" ${f.kim===u?"selected":""}>${esc(kullaniciAd(u))}</option>`).join("")}<option value="-" ${f.kim==="-"?"selected":""}>Atanmamış</option></select>`:""}
     </div>
     ${GV.renk?`<div class="small muted" style="padding:0 18px 10px;display:flex;gap:14px;flex-wrap:wrap">${IS_LEJANT(GV)}</div>`:""}
     ${govde}</section>`;
   return {title:`Yapılacak işler<span class="sub">${acik.length} açık iş${gec?` · <span style="color:var(--borc)">${gec} termini geçmiş</span>`:""}${bug?` · ${bug} bugün`:""}</span>`,
-    btns:`<button class="btn pri" data-act="isForm" data-w>+ Yeni iş</button>`, html,
+    btns:`<button class="btn" data-act="vergiTakvimi" data-w title="Vergi takvimindeki son günlere göre her mükellef için iş oluştur">Vergi takviminden iş oluştur</button><button class="btn pri" data-act="isForm" data-w>+ Yeni iş</button>`, html,
     after(){
       $("#isHizli")?.addEventListener("submit",e=>{ e.preventDefault(); const b=$("#isH_b").value.trim(); if(!b) return $("#isH_b").focus();
         const id=uid("is"), fi=$("#isH_f").value.trim(), cr=fi?sortedCariler().find(c=>c.unvan.toLocaleLowerCase("tr")===fi.toLocaleLowerCase("tr")):null;
@@ -2721,14 +2889,14 @@ function vIsler(){
       document.querySelectorAll(".is-body[data-act]").forEach(b=>b.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); b.click(); } }));
     }};
 }
-function isForm(id){
+function isForm(id,gun){
   const x=id?isler()[id]:null, kul=Object.keys(S.data.kullanicilar||{});
   modal(x?"İşi düzenle":"Yeni iş",`<form class="form" id="isF">
     <div class="f w"><label for="is_b">İş</label><input type="text" id="is_b" name="baslik" value="${esc(x?.baslik||"")}" placeholder="Örn. KDV beyannamesi" required></div>
     <div class="f"><label for="is_f">İlgili firma</label><input type="text" id="is_f" name="firma" list="isFirmaListF" value="${esc(x?isFirma(x):(S.view.is?.firma&&S.view.is.firma!=="-"?S.view.is.firma:""))}" placeholder="Firma adını yazın" autocomplete="off"><datalist id="isFirmaListF">${isFirmalar().map(v=>`<option value="${esc(v)}">`).join("")}</datalist></div>
     <div class="f"><label for="is_g">İş grubu</label><input type="text" id="is_g" name="grup" list="isGrupListF" value="${esc(x?.grup||"")}" placeholder="Örn. KDV, SGK, Muhtasar" autocomplete="off"><datalist id="isGrupListF">${isGruplar().map(v=>`<option value="${esc(v)}">`).join("")}</datalist></div>
     <div class="f w"><label for="is_a">Açıklama</label><textarea id="is_a" name="aciklama" rows="3">${esc(x?.aciklama||"")}</textarea></div>
-    <div class="f"><label for="is_t">Termin tarihi</label><input type="date" id="is_t" name="sonTarih" value="${esc(x?.sonTarih||"")}"></div>
+    <div class="f"><label for="is_t">Termin tarihi</label><input type="date" id="is_t" name="sonTarih" value="${esc(x?.sonTarih||gun||"")}"></div>
     <div class="f"><label for="is_o">Öncelik</label><select id="is_o" name="oncelik">${Object.entries(IS_ONC).map(([k,v])=>`<option value="${k}" ${(x?.oncelik||"normal")===k?"selected":""}>${v}</option>`).join("")}</select></div>
     <div class="f"><label for="is_r">Tekrar</label><select id="is_r" name="tekrar">${Object.entries(IS_TEKRAR).map(([k,v])=>`<option value="${k}" ${(x?.tekrar||"")===k?"selected":""}>${v}</option>`).join("")}</select></div>
     ${kul.length>1?`<div class="f"><label for="is_k">Sorumlu</label><select id="is_k" name="atanan"><option value="">—</option>${kul.map(u=>`<option value="${esc(u)}" ${x?.atanan===u?"selected":""}>${esc(kullaniciAd(u))}</option>`).join("")}</select></div>`:""}
@@ -2744,9 +2912,13 @@ function isForm(id){
     closeModal(); changed(); toast(x?"İş güncellendi":"İş eklendi"); });
 }
 Object.assign(ACT,{
-  isForm:el=>isForm(el.dataset.id),
+  isForm:el=>isForm(el.dataset.id,el.dataset.gun),
   isDurum:el=>{ S.view.is.durum=el.dataset.k; render(); },
   isGrpAc:el=>{ const k=S.view.is.kapali; k[el.dataset.k]=!k[el.dataset.k]; render(); },
+  isMod:el=>{ isGorunum().mod=el.dataset.k; isGorunumKaydet(); render(); },
+  isTkAy:el=>{ const f=S.view.is, n=+el.dataset.n; f.tkAy=n?ayKaydir(f.tkAy||TODAY.slice(0,7),n):TODAY.slice(0,7); f.tkGun=n?"":TODAY; render(); },
+  isGun:el=>{ const f=S.view.is, g=el.dataset.g; f.tkGun=g; if(g.slice(0,7)!==(f.tkAy||TODAY.slice(0,7))) f.tkAy=g.slice(0,7); render(); setTimeout(()=>document.querySelector(".tkv-gun-bas")?.scrollIntoView({block:"nearest",behavior:"smooth"}),30); },
+  vergiTakvimi:()=>vergiTakvimiModal(),
   isGorunumAc:()=>{ const G=isGorunum();
     modal("Görünüm ayarları",`<form class="form" id="isGF"><div class="is-ayar-grid">
       <label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="kalan" ${G.kalan?"checked":""}> Kalan süreyi göster <span class="small muted">(⏱ 5 gün kaldı)</span></label>
@@ -3440,7 +3612,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.8.7";
+const SURUM="1.9.3";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
