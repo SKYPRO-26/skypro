@@ -2788,7 +2788,12 @@ const GM={token:"",exp:0,email:"",
         ok(); },
       error_callback:er=>no(new Error(er?.type==="popup_closed"?"Google penceresi kapatıldı.":er?.type==="popup_failed_to_open"?"Google penceresi açılamadı; tarayıcının açılır pencere engelini kaldırın.":(er?.message||"Google bağlantısı kurulamadı."))) });
       tc.requestAccessToken(); }); },
-  async gonder(raw){ const r=await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media",{method:"POST",headers:{Authorization:"Bearer "+this.token,"Content-Type":"message/rfc822"},body:raw});
+  // standart gönderim adresi (tarayıcıdan çağrılabilir); ileti base64url "raw" alanında gider. Ağ engeli olursa yedek adres denenir.
+  async gonder(raw){ const govde=JSON.stringify({raw:btoa(raw).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")});
+    let r, son;
+    for(const u of ["https://gmail.googleapis.com/gmail/v1/users/me/messages/send","https://www.googleapis.com/gmail/v1/users/me/messages/send"]){
+      try{ r=await fetch(u,{method:"POST",headers:{Authorization:"Bearer "+this.token,"Content-Type":"application/json"},body:govde}); break; }catch(e){ son=e; } }
+    if(!r) throw new Error("Google'a bağlanılamadı ("+(son?.message||"ağ hatası")+"). İnternet bağlantısını, varsa reklam/gizlilik engelleyici eklentileri ya da kurum güvenlik duvarını kontrol edin.");
     if(!r.ok){ let t=""; try{ t=(await r.json()).error?.message||""; }catch{} if(r.status===401) this.token=""; throw new Error(`Gmail ${r.status}${t?": "+t:""}`); } return r.json(); },
   kes(){ try{ if(this.token&&window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(this.token,()=>{}); }catch{} this.token=""; this.exp=0; } };
 async function gmHazirla(){ if(!GM.hazir()) await GM.baglan(); const A=emAyar(); if(GM.email&&A.hesap!==GM.email){ A.hesap=GM.email; emKaydet(A); } }
@@ -3943,7 +3948,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.9.6-önizleme";
+const SURUM="1.9.7-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
