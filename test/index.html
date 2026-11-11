@@ -120,6 +120,19 @@ tfoot td{font-weight:600;background:var(--surface-2);border-top:1px solid var(--
 .is-not{display:flex;flex-direction:column;gap:6px;width:100%}
 .is-not textarea{width:100%;resize:vertical;min-height:90px}
 .is-acik,.is-acik+.is-not-li{background:var(--surface-2)}
+.toast-btn{margin-left:14px;background:transparent;border:1px solid currentColor;color:inherit;border-radius:6px;padding:2px 10px;font:inherit;font-weight:600;cursor:pointer}
+.is-sec{flex:none;margin-top:4px;width:16px;height:16px;cursor:pointer}
+.is-grp li.is-secili{background:#e3eefb!important}
+.is-btns{display:flex;gap:6px;flex:none;align-items:flex-start}
+.is-menu{position:relative}
+.is-menu>summary{list-style:none;cursor:pointer}
+.is-menu>summary::-webkit-details-marker{display:none}
+.is-menu-l{position:absolute;right:0;top:calc(100% + 4px);z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:6px;min-width:190px;display:flex;flex-direction:column}
+.is-menu-l button{background:none;border:0;text-align:left;padding:7px 10px;border-radius:6px;font:inherit;font-size:13.5px;cursor:pointer;color:var(--ink)}
+.is-menu-l button:hover{background:var(--surface-2)}
+.is-menu-l hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+.is-menu-l .mt{font-size:11px;color:var(--muted);padding:4px 10px 2px;text-transform:uppercase;letter-spacing:.04em}
+.is-toplu{position:sticky;top:0;z-index:15;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 18px;background:#e8f1fb;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .tkTablo td.mono{white-space:nowrap} .tkTablo td[data-durum]{min-width:170px}
 .tk-bolum{border-top:4px solid var(--alacak)}
 .tk-bolum.tk-gider{border-top-color:var(--warn)}
@@ -352,6 +365,8 @@ function bal(n,c="TRY",tag=true){
 const amt = (n,c) => `<span class="amt">${money(n,c)}</span>`;
 const uid = p => p+"-"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function toast(t){ const el=$("#toast"); el.textContent=t; el.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>el.hidden=true,3200); }
+function toastAksiyon(t,etiket,fn,ms=8000){ const el=$("#toast"); el.innerHTML=`<span>${esc(t)}</span><button type="button" class="toast-btn">${esc(etiket)}</button>`; el.hidden=false;
+  el.querySelector("button").addEventListener("click",()=>{ el.hidden=true; clearTimeout(toast.t); fn(); }); clearTimeout(toast.t); toast.t=setTimeout(()=>el.hidden=true,ms); }
 
 /* ---------- sabitler ---------- */
 const TUR = {
@@ -1908,6 +1923,7 @@ const ACT={
   }
 };
 document.addEventListener("click",e=>{
+  document.querySelectorAll("details.is-menu[open]").forEach(d=>{ if(!d.contains(e.target)) d.open=false; });
   if(e.target.closest(".secTd")){ const k=e.target.closest(".secTd").querySelector("input"); if(k&&e.target!==k){ k.click(); } return; }
   const a=e.target.closest("[data-act]");
   if(a){ const f=ACT[a.dataset.act]; if(f){ e.preventDefault(); if(a.hasAttribute("data-w")&&!S.canWrite) return; f(a,e); } return; }
@@ -2707,7 +2723,7 @@ function vtCariTurleri(cid){ const p=vtProfil()[cid]; if(p) return VT_TUR.filter
 const vtOnay = () => S.data.vtOnay||(S.data.vtOnay={});
 const vtUyar = (v,c) => !v.mt||v.mt===vtMt(c.id);
 function vtAyIsleri(ay,gecmisAtla){
-  const V=vtListe(ay+"-01",aySonu(ay)).filter(v=>!gecmisAtla||v.son>=TODAY), M=vtMukellefler(), var_=new Set(isListe().map(x=>x.vergiKey).filter(Boolean));
+  const V=vtListe(ay+"-01",aySonu(ay)).filter(v=>!gecmisAtla||v.son>=TODAY), M=vtMukellefler(), var_=new Set([...isListe().map(x=>x.vergiKey).filter(Boolean),...Object.keys(S.data.vtSilinen||{})]);
   const yeni=[], mevcut=[];
   for(const v of V) for(const c of M) if(vtCariTurleri(c.id).includes(v.tur)&&vtUyar(v,c)){ const key=`${v.tur.k}|${v.donem}|${c.id}`; (var_.has(key)?mevcut:yeni).push({v,c,key}); }
   return {V,M,yeni,mevcut};
@@ -2746,7 +2762,7 @@ function vergiTakvimiModal(){
       <details id="vtDetay" ${f.detay?"open":""}><summary class="small"><b>${V.length} son gün</b> bu ayda · ${yeni.length} iş oluşturulacak${mevcut.length?` · ${mevcut.length} iş zaten var`:""} — listeyi ${f.detay?"gizle":"gör"}</summary>
         <div class="tw vt-liste" style="max-height:240px;overflow:auto;margin-top:6px"><table><thead><tr><th>Son gün</th><th>Yükümlülük</th><th>Dönem</th><th>Oluşturulacak</th></tr></thead><tbody>
         ${V.map(v=>{ const g=grp.get(v); return `<tr${g.y.length?"":` style="opacity:.55"`}><td class="mono small">${trDate(v.son)}${v.son!==v.ham?` <span class="muted" title="${trDate(v.ham)} tatil/hafta sonu">↷</span>`:""}</td><td class="small">${esc(v.tur.ad)}${v.mt?` <span class="muted">(${MT_AD[v.mt].toLocaleLowerCase("tr")})</span>`:""}</td><td class="small">${esc(v.donemAd)}</td>
-          <td class="small">${g.y.length?`<b>${g.y.length}</b> · ${adlar(g.y)}`:`<span class="muted">${g.m.length?"":"takip eden mükellef yok"}</span>`}${g.m.length?` <span class="muted">(${g.m.length} zaten var)</span>`:""}</td></tr>`; }).join("")}</tbody></table></div></details>
+          <td class="small">${g.y.length?`<b>${g.y.length}</b> · ${adlar(g.y)}`:`<span class="muted">${g.m.length?"":"takip eden mükellef yok"}</span>`}${g.m.length?` <span class="muted">(${g.m.length} zaten var / silinmiş)</span>`:""}</td></tr>`; }).join("")}</tbody></table></div></details>
       <div>${F.n?`<div class="notice warn small" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;position:sticky;top:0;z-index:3"><span><b>${F.n} işaret değişikliği onay bekliyor.</b> Sarı hücreler değişti; yukarıdaki sayılar bu işaretlere göre. Onaylamadan pencereyi kapatırsanız değişiklikler kaydedilmez.</span><span class="btns"><button class="btn sm" id="vtIsVaz">Vazgeç</button><button class="btn sm pri" id="vtIsOnay" data-w>İşaretleri onayla</button></span></div>`:""}
       <div class="small" style="margin-bottom:6px"><b>Mükellef × yükümlülük</b> — işaretledikten sonra "İşaretleri onayla" ile kaydedin; kaydedilen işaretler mükellef bazında saklanır ve sonraki aylara aynen gelir. Aylık ve 3 aylık muhtasardan biri seçilebilir.</div>
       ${M.length?`<div class="tw vt-matris"><table><thead><tr><th>Mükellef</th><th>Tür</th>${VT_TUR.map(t=>`<th class="c" title="${esc(t.ad)} · ${esc(t.kural)}"><label style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer"><span>${esc(t.kisa)}</span><input type="checkbox" data-vtsutun="${t.k}" ${M.every(c=>vtCariTurleri(c.id).includes(t))?"checked":""} aria-label="${esc(t.ad)}: tüm mükellefler"></label></th>`).join("")}</tr></thead><tbody>
@@ -2798,11 +2814,17 @@ function isSatir(x){
   const G=isGorunum(), ac=S.view.is?.ac===x.id, bitti=x.durum==="bitti", c=x.cariId?S.cariler.get(x.cariId):null, g=isKalan(x), rk=isRenk(x), firma=isFirma(x);
   const tarih=x.sonTarih?`<span class="mono" title="Termin tarihi">📅 ${trDate(x.sonTarih)}</span>`:"";
   const kalan=G.kalan&&g!==null?`<span class="is-kalan ${rk}">⏱ ${isKalanYazi(g)}</span>`:"";
-  return `<li class="${bitti?"is-bitti":""}${ac?" is-acik":""}${G.renk&&rk?" is-"+rk:""}"><button type="button" class="is-chk ${bitti?"on":""}" data-act="isBitir" data-id="${x.id}" data-w title="${bitti?"Yeniden aç":"Tamamlandı olarak işaretle"}" aria-label="${bitti?"Yeniden aç":"Tamamlandı"}">${bitti?"✓":""}</button>
+  const sc=!!S.view.is?.sec?.[x.id]; (S._isGor||(S._isGor=[])).push(x.id);
+  return `<li class="${bitti?"is-bitti":""}${ac?" is-acik":""}${G.renk&&rk?" is-"+rk:""}${sc?" is-secili":""}">${S.canWrite?`<input type="checkbox" class="is-sec" data-issec="${x.id}" ${sc?"checked":""} aria-label="Seç: ${esc(x.baslik)}" title="Toplu işlem için seç">`:""}<button type="button" class="is-chk ${bitti?"on":""}" data-act="isBitir" data-id="${x.id}" data-w title="${bitti?"Yeniden aç":"Tamamlandı olarak işaretle"}" aria-label="${bitti?"Yeniden aç":"Tamamlandı"}">${bitti?"✓":""}</button>
     <div class="is-body" data-act="isAc" data-id="${x.id}" role="button" tabindex="0" aria-expanded="${ac}" title="Notları ${ac?"kapat":"aç"}" style="cursor:pointer"><div><span class="muted small" aria-hidden="true">${ac?"▾":"▸"}</span> ${firma&&G.grupla!=="firma"?`<span class="is-firma">${esc(firma)}</span> <span class="muted">—</span> `:""}<b>${esc(x.baslik)}</b>${x.not?` <span class="small muted" title="Not var">📝</span>`:""}${x.oncelik==="yuksek"&&!bitti?` <span class="pill bad">Öncelikli</span>`:x.oncelik==="dusuk"?` <span class="pill">Düşük</span>`:""}</div>
       ${x.aciklama?`<div class="small muted is-ack">${esc(x.aciklama)}</div>`:""}
       <div class="is-meta small muted">${kalan}${tarih}${x.grup&&G.grupla!=="grup"?`<span class="pill">${esc(x.grup)}</span>`:""}${c?`<a href="#cari-${c.id}" title="Cari kartını aç">${esc(c.kod)}</a>`:""}${x.atanan?`<span>👤 ${esc(kullaniciAd(x.atanan))}</span>`:""}${x.tekrar?`<span>↻ ${IS_TEKRAR[x.tekrar]}</span>`:""}${bitti&&x.bitis?`<span>${trDate(iso(new Date(x.bitis.at)))} tamamlandı${x.bitis.by?" · "+esc(kullaniciAd(x.bitis.by)):""}</span>`:""}</div></div>
-    <button type="button" class="btn sm" data-act="isForm" data-id="${x.id}" data-w>Düzenle</button></li>
+    ${S.canWrite?`<div class="is-btns"><button type="button" class="btn sm" data-act="isForm" data-id="${x.id}" data-w>Düzenle</button><button type="button" class="btn sm danger" data-act="isSil" data-id="${x.id}" data-w title="İşi sil (8 saniye içinde geri alınabilir)">Sil</button>
+      <details class="is-menu"><summary class="btn sm" title="Diğer işlemler" aria-label="Diğer işlemler">⋯</summary><div class="is-menu-l">
+        ${bitti?"":`<div class="mt">Ertele</div><button type="button" data-act="isErtele" data-id="${x.id}" data-n="1">+1 gün</button><button type="button" data-act="isErtele" data-id="${x.id}" data-n="7">+1 hafta</button><button type="button" data-act="isErtele" data-id="${x.id}" data-n="ay">+1 ay</button><button type="button" data-act="isErtele" data-id="${x.id}" data-n="sec">Tarih seç…</button><hr>`}
+        <button type="button" data-act="isCogalt" data-id="${x.id}">Çoğalt (kopyasını aç)</button>
+        ${bitti?"":`<button type="button" data-act="isOnc" data-id="${x.id}">${x.oncelik==="yuksek"?"Önceliği kaldır":"Öncelikli yap"}</button>`}
+      </div></details></div>`:""}</li>
   ${ac?`<li class="is-not-li"><div class="is-not"><label for="isNot" class="small"><b>Notlar</b> <span class="muted" id="isNotSt">${x.notGuncelleme?`son değişiklik ${(d=>trDate(iso(d))+" "+pad(d.getHours())+":"+pad(d.getMinutes()))(new Date(x.notGuncelleme.at))}${x.notGuncelleme.by?" · "+esc(kullaniciAd(x.notGuncelleme.by)):""}`:"yazdıkça kaydedilir"}</span></label>
     <textarea id="isNot" data-id="${x.id}" rows="5" placeholder="Bu işle ilgili notlarınızı yazın: kiminle görüşüldü, ne eksik, nerede kaldı…" ${S.canWrite?"":"readonly"}>${esc(x.not||"")}</textarea></div></li>`:""}`;
 }
@@ -2827,7 +2849,8 @@ function isTakvim(L,f){
   return h;
 }
 function vIsler(){
-  const f=S.view.is||(S.view.is={durum:"acik",q:"",kim:"",firma:"",kapali:{}}); f.kapali=f.kapali||{};
+  const f=S.view.is||(S.view.is={durum:"acik",q:"",kim:"",firma:"",kapali:{}}); f.kapali=f.kapali||{}; f.sec=f.sec||{}; S._isGor=[];
+  for(const id of Object.keys(f.sec)) if(!isler()[id]) delete f.sec[id];
   const GV=isGorunum(), q=f.q.trim().toLocaleLowerCase("tr");
   const L=isListe().filter(x=>(f.durum==="tumu"||(f.durum==="bitti")===(x.durum==="bitti"))
     &&(!f.kim||(f.kim==="-"?!x.atanan:x.atanan===f.kim))
@@ -2874,6 +2897,12 @@ function vIsler(){
       ${kul.length>1?`<select id="isKim" aria-label="Kişi"><option value="">Herkes</option>${kul.map(u=>`<option value="${esc(u)}" ${f.kim===u?"selected":""}>${esc(kullaniciAd(u))}</option>`).join("")}<option value="-" ${f.kim==="-"?"selected":""}>Atanmamış</option></select>`:""}
     </div>
     ${GV.renk?`<div class="small muted" style="padding:0 18px 10px;display:flex;gap:14px;flex-wrap:wrap">${IS_LEJANT(GV)}</div>`:""}
+    ${(()=>{ const n=Object.keys(f.sec).length; if(!n||!S.canWrite) return ""; const acikSec=Object.keys(f.sec).filter(id=>isler()[id]?.durum!=="bitti").length;
+      return `<div class="is-toplu" role="region" aria-label="Toplu işlem"><b>${n} iş seçili</b>
+        <button class="btn sm" data-act="isTopluSec">Görünenlerin tümünü seç</button><button class="btn sm" data-act="isTopluTemizle">Seçimi kaldır</button>
+        <span style="flex:1"></span>
+        ${acikSec?`<button class="btn sm" data-act="isTopluBitir">✓ Tamamla</button><span class="small muted">Ertele:</span><button class="btn sm" data-act="isTopluErtele" data-n="1">+1 gün</button><button class="btn sm" data-act="isTopluErtele" data-n="7">+1 hafta</button><button class="btn sm" data-act="isTopluErtele" data-n="ay">+1 ay</button><button class="btn sm" data-act="isTopluErtele" data-n="sec">Tarih…</button>`:""}
+        <button class="btn sm danger" data-act="isTopluSil">Sil</button></div>`; })()}
     ${govde}</section>`;
   return {title:`Yapılacak işler<span class="sub">${acik.length} açık iş${gec?` · <span style="color:var(--borc)">${gec} termini geçmiş</span>`:""}${bug?` · ${bug} bugün`:""}</span>`,
     btns:`<button class="btn" data-act="vergiTakvimi" data-w title="Vergi takvimindeki son günlere göre her mükellef için iş oluştur">Vergi takviminden iş oluştur</button><button class="btn pri" data-act="isForm" data-w>+ Yeni iş</button>`, html,
@@ -2888,19 +2917,20 @@ function vIsler(){
       document.querySelectorAll(".is-grp-h[data-act]").forEach(b=>b.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); b.click(); } }));
       const nt=$("#isNot"); if(nt) nt.addEventListener("input",()=>{ const x=isler()[nt.dataset.id]; if(!x||!S.canWrite) return; x.not=nt.value; x.notGuncelleme=stamp(); scheduleSave(); const st=$("#isNotSt"); if(st) st.textContent="kaydediliyor…"; clearTimeout(nt.t); nt.t=setTimeout(()=>{ if($("#isNotSt")) $("#isNotSt").textContent="kaydedildi"; },900); });
       document.querySelectorAll(".is-body[data-act]").forEach(b=>b.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); b.click(); } }));
+      document.querySelectorAll("[data-issec]").forEach(k=>k.addEventListener("change",()=>{ const id=k.dataset.issec; if(k.checked) f.sec[id]=1; else delete f.sec[id]; const y=window.scrollY; render(); window.scrollTo(0,y); }));
     }};
 }
-function isForm(id,gun){
-  const x=id?isler()[id]:null, kul=Object.keys(S.data.kullanicilar||{});
-  modal(x?"İşi düzenle":"Yeni iş",`<form class="form" id="isF">
-    <div class="f w"><label for="is_b">İş</label><input type="text" id="is_b" name="baslik" value="${esc(x?.baslik||"")}" placeholder="Örn. KDV beyannamesi" required></div>
-    <div class="f"><label for="is_f">İlgili firma</label><input type="text" id="is_f" name="firma" list="isFirmaListF" value="${esc(x?isFirma(x):(S.view.is?.firma&&S.view.is.firma!=="-"?S.view.is.firma:""))}" placeholder="Firma adını yazın" autocomplete="off"><datalist id="isFirmaListF">${isFirmalar().map(v=>`<option value="${esc(v)}">`).join("")}</datalist></div>
-    <div class="f"><label for="is_g">İş grubu</label><input type="text" id="is_g" name="grup" list="isGrupListF" value="${esc(x?.grup||"")}" placeholder="Örn. KDV, SGK, Muhtasar" autocomplete="off"><datalist id="isGrupListF">${isGruplar().map(v=>`<option value="${esc(v)}">`).join("")}</datalist></div>
-    <div class="f w"><label for="is_a">Açıklama</label><textarea id="is_a" name="aciklama" rows="3">${esc(x?.aciklama||"")}</textarea></div>
-    <div class="f"><label for="is_t">Termin tarihi</label><input type="date" id="is_t" name="sonTarih" value="${esc(x?.sonTarih||gun||"")}"></div>
-    <div class="f"><label for="is_o">Öncelik</label><select id="is_o" name="oncelik">${Object.entries(IS_ONC).map(([k,v])=>`<option value="${k}" ${(x?.oncelik||"normal")===k?"selected":""}>${v}</option>`).join("")}</select></div>
-    <div class="f"><label for="is_r">Tekrar</label><select id="is_r" name="tekrar">${Object.entries(IS_TEKRAR).map(([k,v])=>`<option value="${k}" ${(x?.tekrar||"")===k?"selected":""}>${v}</option>`).join("")}</select></div>
-    ${kul.length>1?`<div class="f"><label for="is_k">Sorumlu</label><select id="is_k" name="atanan"><option value="">—</option>${kul.map(u=>`<option value="${esc(u)}" ${x?.atanan===u?"selected":""}>${esc(kullaniciAd(u))}</option>`).join("")}</select></div>`:""}
+function isForm(id,gun,kopId){
+  const x=id?isler()[id]:null, v=x||(kopId?isler()[kopId]:null), kul=Object.keys(S.data.kullanicilar||{});
+  modal(x?"İşi düzenle":v?"İşi çoğalt":"Yeni iş",`<form class="form" id="isF">
+    <div class="f w"><label for="is_b">İş</label><input type="text" id="is_b" name="baslik" value="${esc(v?.baslik||"")}" placeholder="Örn. KDV beyannamesi" required></div>
+    <div class="f"><label for="is_f">İlgili firma</label><input type="text" id="is_f" name="firma" list="isFirmaListF" value="${esc(v?isFirma(v):(S.view.is?.firma&&S.view.is.firma!=="-"?S.view.is.firma:""))}" placeholder="Firma adını yazın" autocomplete="off"><datalist id="isFirmaListF">${isFirmalar().map(v=>`<option value="${esc(v)}">`).join("")}</datalist></div>
+    <div class="f"><label for="is_g">İş grubu</label><input type="text" id="is_g" name="grup" list="isGrupListF" value="${esc(v?.grup||"")}" placeholder="Örn. KDV, SGK, Muhtasar" autocomplete="off"><datalist id="isGrupListF">${isGruplar().map(v=>`<option value="${esc(v)}">`).join("")}</datalist></div>
+    <div class="f w"><label for="is_a">Açıklama</label><textarea id="is_a" name="aciklama" rows="3">${esc(v?.aciklama||"")}</textarea></div>
+    <div class="f"><label for="is_t">Termin tarihi</label><input type="date" id="is_t" name="sonTarih" value="${esc(x?.sonTarih||gun||(v?.sonTarih&&v.sonTarih>=TODAY?v.sonTarih:"")||"")}"></div>
+    <div class="f"><label for="is_o">Öncelik</label><select id="is_o" name="oncelik">${Object.entries(IS_ONC).map(([k,v])=>`<option value="${k}" ${(v?.oncelik||"normal")===k?"selected":""}>${v}</option>`).join("")}</select></div>
+    <div class="f"><label for="is_r">Tekrar</label><select id="is_r" name="tekrar">${Object.entries(IS_TEKRAR).map(([k,v])=>`<option value="${k}" ${(v?.tekrar||"")===k?"selected":""}>${v}</option>`).join("")}</select></div>
+    ${kul.length>1?`<div class="f"><label for="is_k">Sorumlu</label><select id="is_k" name="atanan"><option value="">—</option>${kul.map(u=>`<option value="${esc(u)}" ${v?.atanan===u?"selected":""}>${esc(kullaniciAd(u))}</option>`).join("")}</select></div>`:""}
     <p class="small muted f w" style="margin:0">Tekrarlayan bir iş tamamlandığında bir sonraki dönemin işi aynı bilgilerle kendiliğinden açılır.</p>
     <p class="err" id="mErr" hidden></p></form>`,
     `${x?`<button class="btn danger" data-act="isSil" data-id="${id}" data-w>Sil</button>`:"<span></span>"}<div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="isF" data-w>Kaydet</button></div>`);
@@ -2939,10 +2969,36 @@ Object.assign(ACT,{
   isAc:el=>{ const f=S.view.is; f.ac=f.ac===el.dataset.id?null:el.dataset.id; render(); if(f.ac) setTimeout(()=>{ const t=$("#isNot"); if(t&&S.canWrite){ t.focus(); t.setSelectionRange(t.value.length,t.value.length); } },0); },
   isBitir:el=>{ const x=isler()[el.dataset.id]; if(!x) return;
     if(x.durum==="bitti"){ x.durum="acik"; delete x.bitis; if(x.sonrakiId&&isler()[x.sonrakiId]&&isler()[x.sonrakiId].durum!=="bitti"){ delete isler()[x.sonrakiId]; } delete x.sonrakiId; changed(); return toast("İş yeniden açıldı"); }
-    x.durum="bitti"; x.bitis=stamp(); let ek="";
-    if(x.tekrar&&x.sonTarih){ const nid=uid("is"), t=isIleri(x.sonTarih,x.tekrar); isler()[nid]={...x,id:nid,durum:"acik",sonTarih:t,...stamp()}; for(const k of ["bitis","sonrakiId","duzenleme","not","notGuncelleme"]) delete isler()[nid][k]; x.sonrakiId=nid; ek=`; sonraki: ${trDate(t)}`; }
-    changed(); toast("Tamamlandı"+ek); },
-  isSil:el=>{ if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent="Silinsin mi? Onayla"; return; } delete isler()[el.dataset.id]; closeModal(); changed(); toast("İş silindi"); },
+    const ek=isTamamla(x); changed(); toast("Tamamlandı"+ek); },
+  isSil:el=>{ closeModal(); isSilGeriAlinir([el.dataset.id]); },
+  isErtele:el=>{ const x=isler()[el.dataset.id]; if(!x) return; if(el.dataset.n==="sec") return isTarihSec([x.id]); isErteleUygula([x.id],el.dataset.n); },
+  isCogalt:el=>isForm(null,"",el.dataset.id),
+  isOnc:el=>{ const x=isler()[el.dataset.id]; if(!x) return; x.oncelik=x.oncelik==="yuksek"?"normal":"yuksek"; x.duzenleme=stamp(); changed(); toast(x.oncelik==="yuksek"?"Öncelikli yapıldı":"Öncelik kaldırıldı"); },
+  isTopluSec:()=>{ const f=S.view.is; for(const id of S._isGor||[]) f.sec[id]=1; render(); },
+  isTopluTemizle:()=>{ S.view.is.sec={}; render(); },
+  isTopluBitir:()=>{ const f=S.view.is, L=Object.keys(f.sec).map(id=>isler()[id]).filter(x=>x&&x.durum!=="bitti"); for(const x of L) isTamamla(x); f.sec={}; changed(); toast(`${L.length} iş tamamlandı`); },
+  isTopluErtele:el=>{ const ids=Object.keys(S.view.is.sec).filter(id=>isler()[id]&&isler()[id].durum!=="bitti"); if(el.dataset.n==="sec") return isTarihSec(ids); isErteleUygula(ids,el.dataset.n); },
+  isTopluSil:()=>{ const ids=Object.keys(S.view.is.sec); S.view.is.sec={}; isSilGeriAlinir(ids); },
+});
+/* iş silme: 8 saniye içinde geri alınabilir; vergi takviminden gelen iş silinirse takvim onu yeniden önermez */
+function isTamamla(x){ x.durum="bitti"; x.bitis=stamp(); delete S.view.is?.sec?.[x.id];
+  if(x.tekrar&&x.sonTarih){ const nid=uid("is"), t=isIleri(x.sonTarih,x.tekrar); isler()[nid]={...x,id:nid,durum:"acik",sonTarih:t,...stamp()}; for(const k of ["bitis","sonrakiId","duzenleme","not","notGuncelleme","vergiKey","kaynak"]) delete isler()[nid][k]; x.sonrakiId=nid; return `; sonraki: ${trDate(t)}`; }
+  return ""; }
+function isSilGeriAlinir(ids){ const yedek=ids.map(id=>isler()[id]).filter(Boolean); if(!yedek.length) return;
+  const vs=S.data.vtSilinen||(S.data.vtSilinen={});
+  for(const x of yedek){ delete isler()[x.id]; if(x.vergiKey) vs[x.vergiKey]=1; }
+  changed(); toastAksiyon(yedek.length>1?`${yedek.length} iş silindi`:`"${yedek[0].baslik}" silindi`,"Geri al",()=>{ for(const x of yedek){ isler()[x.id]=x; if(x.vergiKey) delete vs[x.vergiKey]; } changed(); toast("Geri alındı"); }); }
+function isErteleTarih(x,n){ const b=x.sonTarih||TODAY; return n==="ay"?isIleri(b,"ay"):addDays(b,+n); }
+function isErteleUygula(ids,n){ const L=ids.map(id=>isler()[id]).filter(Boolean); if(!L.length) return; const st=stamp();
+  for(const x of L){ x.sonTarih=isErteleTarih(x,n); x.duzenleme=st; }
+  changed(); toast(L.length>1?`${L.length} işin termini ertelendi`:`Yeni termin: ${trDate(L[0].sonTarih)}`); }
+function isTarihSec(ids){ if(!ids.length) return; const x=ids.length===1?isler()[ids[0]]:null;
+  modal(ids.length>1?`${ids.length} işin termin tarihi`:"Termin tarihi",`<form class="form" id="isTS"><div class="f w"><label for="isTS_t">Yeni termin tarihi</label><input type="date" id="isTS_t" value="${esc(x?.sonTarih||TODAY)}" required></div>
+    ${ids.length>1?`<p class="small muted f w" style="margin:0">Seçilen tüm işlerin termini bu tarih olur.</p>`:""}<p class="err" id="mErr" hidden></p></form>`,
+    `<span></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="isTS">Uygula</button></div>`);
+  $("#isTS").addEventListener("submit",e=>{ e.preventDefault(); const t=$("#isTS_t").value; if(!t) return showErr("Tarih seçin."); const st=stamp();
+    for(const id of ids){ const y=isler()[id]; if(y){ y.sonTarih=t; y.duzenleme=st; } } S.view.is.sec={}; closeModal(); changed(); toast(`Termin ${trDate(t)} yapıldı`); }); }
+Object.assign(ACT,{
 });
 
 /* ---------- aylık ücret tahakkuku (firmaya özel modül) ---------- */
@@ -3613,7 +3669,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.9.3-önizleme";
+const SURUM="1.9.4-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
