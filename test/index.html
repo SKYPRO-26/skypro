@@ -871,7 +871,7 @@ async function girisYap({dosya,raw,key,data,u,hdr,mesaj}){
   $("#start").hidden=true; $("#app").hidden=false; document.title=(S.ayar?.firma?.unvan||"Firma")+" · SKYPRO";
   $("#oturumInfo").textContent=S.me+" · "+ROL[S.rol];
   $("#firmaDegLink").hidden=!(S.firmalar&&S.firmalar.length>1);
-  yedekGunu=null; location.hash="#ozet"; render(); scheduleSave(); setTimeout(tkOtoKontrol,1200);
+  yedekGunu=null; location.hash="#ozet"; render(); scheduleSave(); setTimeout(tkOtoKontrol,1200); setTimeout(emOtoKontrol,2600);
   if(mesaj) toast(mesaj);
   sonHareket=Date.now(); clearInterval(oturumT);
   oturumT=setInterval(()=>{ const dk=num(S.data?.oturumDk)||15; if(S.firmalar && Date.now()-sonHareket>dk*60000) cikis(`${dk} dakika işlem yapılmadığı için oturum kapatıldı.`); },20000);
@@ -1068,7 +1068,7 @@ function vCariler(){
   :`<div class="empty">${S.cariler.size?"Filtreye uyan cari yok.":"Henüz cari kartı yok. Sağ üstten <b>Yeni cari</b> ile başlayın."}</div>`}</section>
   <p class="small muted">B: cari bize borçlu (alacağımız) · A: cari alacaklı (borcumuz). Dövizli carilerde TL karşılığı Ayarlar'daki güncel kurla hesaplanır.</p>
   ${cariAktarimPanel()}`;
-  return {title:"Cari hesaplar",btns:`<button class="btn" data-act="cariAktar" data-w>Excel'den cari al</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
+  return {title:"Cari hesaplar",btns:`<button class="btn" data-act="emTopluAc" data-w title="Müşterilere PDF ekli ekstreyi e-posta ile gönder">📧 Toplu ekstre gönder</button><button class="btn" data-act="cariAktar" data-w>Excel'den cari al</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
     after(){
       $("#cfq").addEventListener("input",e=>{f.q=e.target.value; const p=e.target.selectionStart; render(); const i=$("#cfq"); i.focus(); i.setSelectionRange(p,p);});
       $("#cftip").addEventListener("change",e=>{f.tip=e.target.value;render();});
@@ -1145,12 +1145,12 @@ function vCariDetay(id){
   <section class="panel"><header><h2>Cari kartı</h2><button class="btn sm" data-act="cariForm" data-id="${id}" data-w>Düzenle</button></header><div class="pad">
     <dl class="info"><dt>Kod</dt><dd class="mono">${esc(c.kod)}</dd><dt>Tip</dt><dd>${CTIP[c.tip]||"—"} · ${c.doviz}</dd>
     ${c.vkn?`<dt>VKN/TCKN</dt><dd class="mono">${esc(c.vkn)}${c.vd?" · "+esc(c.vd):""}</dd>`:""}
-    ${c.yetkili?`<dt>Yetkili</dt><dd>${esc(c.yetkili)}</dd>`:""}${c.tel?`<dt>Telefon</dt><dd>${esc(c.tel)}</dd>`:""}${c.eposta?`<dt>E-posta</dt><dd>${esc(c.eposta)}</dd>`:""}
+    ${c.yetkili?`<dt>Yetkili</dt><dd>${esc(c.yetkili)}</dd>`:""}${c.tel?`<dt>Telefon</dt><dd>${esc(c.tel)}</dd>`:""}${c.eposta?`<dt>E-posta</dt><dd>${esc(c.eposta)}</dd>`:""}${(()=>{ const s=emSon(id); return s?`<dt>Son ekstre maili</dt><dd class="small">${emSaat(s.at)} · ${esc(s.kime)}</dd>`:""; })()}
     ${c.adres?`<dt>Adres</dt><dd>${esc(c.adres)}</dd>`:""}${c.iban?`<dt>IBAN</dt><dd class="mono small">${esc(c.iban)}</dd>`:""}${c.not?`<dt>Not</dt><dd>${esc(c.not)}</dd>`:""}</dl>
   </div></section></div>
   <section class="panel"><header><h2>Hesap ekstresi</h2><div class="filters">
     <label>Başlangıç<input type="date" id="ceb" value="${f.bas}"></label><label>Bitiş<input type="date" id="cet" value="${f.bit}"></label>
-    <button class="btn" data-act="ekstreX" data-id="${id}">Excel</button><button class="btn" data-act="ekstreH" data-id="${id}">Yazdırılabilir ekstre</button><button class="btn" data-act="mutabakat" data-id="${id}">Mutabakat mektubu</button>
+    <button class="btn" data-act="ekstreX" data-id="${id}">Excel</button><button class="btn" data-act="ekstreH" data-id="${id}">Yazdırılabilir ekstre</button><button class="btn" data-act="mutabakat" data-id="${id}">Mutabakat mektubu</button><button class="btn" data-act="emTek" data-id="${id}" data-w title="Ekstreyi PDF olarak cariye e-posta ile gönder">📧 E-posta ile gönder</button>
   </div></header>
   ${secCubukYer()}<div class="tw"><table><thead><tr>${secTh(e.rows.map(r=>r.h.id))}<th>Tarih</th><th>Belge no</th><th>İşlem</th><th>Açıklama</th><th>Vade</th><th class="r">Borç</th><th class="r">Alacak</th><th class="r">Bakiye</th></tr>
   ${ekstreFiltreSatir(f.flt,tumRows,fAktif,tumSatir,e.rows.length)}</thead><tbody>
@@ -1373,13 +1373,14 @@ function vAyar(){
     <p class="small muted" style="margin:0">İndirilen dosya şifreli kalır. Mali müşavir kendi programında <b>Dosyadan ekle</b> ile alır ve kendi yönetici parolasıyla açar.</p>
   </div></section>
   ${S.canWrite?belgeNoPanel():""}
+  ${emPanel()}
   ${S.canEdit?modulPanel():""}
   ${turPanel()}
   ${S.canEdit?kullaniciPanel():""}
   <div class="grid2">${parolaPanel()}${S.canEdit?guvenlikPanel():""}</div>`;
   return {title:"Ayarlar",btns:" ",html,after(){
     $("#pwForm").addEventListener("submit",parolaDegistir);
-    turPanelBagla();
+    turPanelBagla(); emPanelBagla();
     $("#otDk")?.addEventListener("change",e=>{ S.data.oturumDk=+e.target.value; changed(); toast("Oturum süresi: "+e.target.value+" dakika"); });
     if(!S.canWrite) document.querySelectorAll("#ayForm input,#ayForm textarea,#kurForm input").forEach(x=>x.disabled=true);
     $("#ayForm").addEventListener("submit",async e=>{e.preventDefault(); const fd=Object.fromEntries(new FormData(e.target)); if(!S.canEdit) fd.kod=S.ayar?.firma?.kod||""; else { fd.kod=String(fd.kod||"").trim().toLocaleUpperCase("tr"); if(normK(fd.kod).length<2){ toast("Firma kodu en az 2 harf veya rakam olmalı."); return; } } const nx={...S.ayar,firma:fd}; if(await put("ayarlar","genel",nx)) toast("Firma bilgileri kaydedildi");});
@@ -2668,6 +2669,279 @@ Object.assign(ACT,{ efTemizle:()=>{ if(S.view.ce) S.view.ce.flt={}; render(); } 
 Object.assign(ACT,{ islemKopya:el=>{ closeModal(); islemForm({kopya:el.dataset.id}); }, topluKopya:()=>topluKopyaModal() });
 Object.assign(ACT,{ topluSil:()=>topluSilModal(), topluDegistir:()=>topluDegistirModal(), secTemizle:()=>{ S.sec.clear(); document.querySelectorAll("[data-sec],[data-secall]").forEach(x=>{ x.checked=false; x.indeterminate=false; x.closest("tr")?.classList.remove("secili"); }); secCubukGuncelle(); } });
 
+/* ---------- ekstre e-postası: firmanın Gmail hesabından PDF ekli ekstre gönderimi ---------- */
+const GOOGLE_CLIENT_ID=""; // Google Cloud'daki OAuth istemci kimliği (tüm firmalar için ortak); boşsa Ayarlar'dan girilir
+const GM_SCOPE="https://www.googleapis.com/auth/gmail.send";
+const EM_DONEM={ay1:"Son 1 ay",ay3:"Son 3 ay",ay6:"Son 6 ay",ay12:"Son 12 ay",yil:"Yıl başından bugüne",tum:"Tüm hareketler"};
+const EM_KAPSAM={bakiyeli:"Bakiyesi olan müşteriler",borclu:"Borçlu (B) müşteriler",tumu:"E-postası olan tüm müşteriler"};
+const EM_VARS={konu:"{firma} – Cari hesap ekstreniz ({tarih})",
+  metin:"Sayın {hitap},\n\n{tarih} tarihi itibarıyla firmamız kayıtlarında cari hesabınız {bakiye} bakiye vermektedir. Hesap ekstreniz ektedir.\n\nKayıtlarınızla bir farklılık görürseniz bize bildirmenizi rica ederiz.\n\nSaygılarımızla,\n{firma}",
+  donem:"ay3",cc:"",clientId:"",hesap:"",oto:{gun:"",kapsam:"bakiyeli",onaysiz:false,son:""},haric:{}};
+const emAyar = () => { const e=S.data?.ayar?.ekstreMail||{}; return {...clone(EM_VARS),...clone(e),oto:{...EM_VARS.oto,...(e.oto||{})},haric:{...(e.haric||{})}}; };
+function emKaydet(e){ S.data.ayar={...(S.data.ayar||{}),ekstreMail:e}; changed(); }
+const emClientId = () => GOOGLE_CLIENT_ID||emAyar().clientId||"";
+function emDonemBas(k){ if(k==="tum") return ""; if(k==="yil"){ const y=+TODAY.slice(0,4)-(TODAY.slice(5,7)==="01"?1:0); return y+"-01-01"; }
+  const n=+String(k).replace("ay","")||3, d=new Date(TODAY+"T12:00:00"); d.setMonth(d.getMonth()-n); d.setDate(d.getDate()+1); return iso(d); }
+const emBakiyeYazi = (b,dv) => Math.abs(b)<0.005?`sıfır (0,00 ${SYM[dv]||dv})`:`${money(Math.abs(b),dv)} ${b>0?"borç":"alacak"}`;
+const emMusteri = c => ["musteri","ikisi"].includes(c.tip);
+function emDegisken(c,son,bas){ const fm=S.ayar?.firma||{};
+  return {hitap:c.yetkili||c.unvan,unvan:c.unvan,yetkili:c.yetkili||"",bakiye:emBakiyeYazi(son,c.doviz),tarih:trDate(TODAY),donem:`${bas?trDate(bas):"başlangıç"} – ${trDate(TODAY)}`,firma:fm.unvan||""}; }
+const emDoldur = (t,v) => String(t||"").replace(/\{(\w+)\}/g,(x,k)=>k in v?v[k]:x);
+const emAdaylar = (kapsam) => sortedCariler().filter(emMusteri).map(c=>({c,bak:S.D.cari.get(c.id).bak}))
+  .filter(({c,bak})=>kapsam==="tumu"||(kapsam==="borclu"?bak>0.004:Math.abs(bak)>0.004));
+const emSon = cid => Object.values(S.data?.ekstreMailLog||{}).filter(x=>x.cariId===cid&&x.durum==="ok").sort((a,b)=>b.at.localeCompare(a.at))[0];
+const emSaat = at => { const d=new Date(at); return trDate(iso(d))+" "+pad(d.getHours())+":"+pad(d.getMinutes()); };
+
+/* sayfa görüntüsü: tarayıcı destekliyorsa kayıpsız (Flate, keskin yazı ve küçük dosya), yoksa JPEG */
+async function pdfResim(cv,x){
+  if(typeof CompressionStream==="function"){ try{
+    // 16 tonlu gri (4 bit): yazı keskin kalır, dosya küçük olur
+    const w=cv.width, h=cv.height, px=x.getImageData(0,0,w,h).data, sr=Math.ceil(w/2), g=new Uint8Array(sr*h);
+    for(let yy=0;yy<h;yy++) for(let xx=0;xx<w;xx++){ const i=(yy*w+xx)*4, v=Math.min(15,Math.round((.299*px[i]+.587*px[i+1]+.114*px[i+2])/17)), o=yy*sr+(xx>>1);
+      g[o]|=xx&1?v:v<<4; }
+    const d=new Uint8Array(await new Response(new Blob([g]).stream().pipeThrough(new CompressionStream("deflate"))).arrayBuffer());
+    return {w,h,d,f:"FlateDecode",cs:"DeviceGray",bpc:4}; }catch{} }
+  const b=atob(cv.toDataURL("image/jpeg",.85).split(",")[1]), d=new Uint8Array(b.length); for(let j=0;j<b.length;j++) d[j]=b.charCodeAt(j);
+  return {w:cv.width,h:cv.height,d,f:"DCTDecode"}; }
+/* PDF: her sayfa tuvale çizilir (Türkçe karakterler sorunsuz), JPEG olarak elle yazılan PDF'e gömülür; dış kütüphane yok */
+function pdfJpeg(imgs,W,H){
+  const enc=new TextEncoder(), parca=[], ofs=[]; let len=0;
+  const ekle=b=>{ const u=typeof b==="string"?enc.encode(b):b; parca.push(u); len+=u.length; };
+  const obj=(i,body)=>{ ofs[i]=len; ekle(`${i} 0 obj\n`); for(const b of [].concat(body)) ekle(b); ekle("\nendobj\n"); };
+  const n=imgs.length, son=3+n*3;
+  ekle("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n");
+  obj(1,"<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2,`<< /Type /Pages /Kids [${imgs.map((_,k)=>`${3+k*3} 0 R`).join(" ")}] /Count ${n} >>`);
+  imgs.forEach((im,k)=>{ const p=3+k*3, cs=`q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+    obj(p,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${p+2} 0 R >> >> /Contents ${p+1} 0 R >>`);
+    obj(p+1,`<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`);
+    obj(p+2,[`<< /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /${im.cs||"DeviceRGB"} /BitsPerComponent ${im.bpc||8} /Filter /${im.f||"DCTDecode"} /Length ${im.d.length} >>\nstream\n`,im.d,"\nendstream"]); });
+  const xr=len; let x=`xref\n0 ${son}\n0000000000 65535 f \n`; for(let i=1;i<son;i++) x+=String(ofs[i]).padStart(10,"0")+" 00000 n \n";
+  ekle(x+`trailer\n<< /Size ${son} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF\n`);
+  const out=new Uint8Array(len); let o=0; for(const u of parca){ out.set(u,o); o+=u.length; } return out;
+}
+async function ekstrePDF(id,bas,bit){
+  const c=S.cariler.get(id), e=ekstreRows(id,bas,bit), fm=S.ayar?.firma||{}, dv=c.doviz;
+  try{ await document.fonts?.ready; }catch{}
+  const W=595.28,H=841.89,K=2,M=30,RH=15,ILK=172,SONRA=62,ALT=H-44,FONT='Arial,"Liberation Sans","Helvetica Neue",Helvetica,sans-serif';
+  const cols=[["Tarih",50],["Belge no",80],["İşlem",62],["Açıklama",102],["Vade",50],["Borç",58,1],["Alacak",58,1],["Bakiye",75.28,1]];
+  const ba=n=>Math.abs(n)<0.005?"0,00":m(Math.abs(n))+(n>0?" B":" A");
+  const sat=[]; if(bas) sat.push({devir:1,h:[trDate(bas),"","Devreden bakiye","","","","",ba(e.devir)]});
+  for(const r of e.rows) sat.push({h:[trDate(r.h.tarih),r.h.belgeNo||"",TUR[r.h.tur]||"",hAciklama(r.h),r.h.vade?trDate(r.h.vade):"",r.b?m(r.b):"",r.a?m(r.a):"",ba(r.bak)]});
+  if(!e.rows.length) sat.push({bos:1,h:["Bu dönemde hareket yok.","","","","","","",""]});
+  sat.push({top:1,h:["Toplam / kapanış bakiyesi","","","","",m(e.rows.reduce((s,r)=>s+r.b,0)),m(e.rows.reduce((s,r)=>s+r.a,0)),ba(e.son)]});
+  const sayfa=[]; let i=0, y0=ILK; do{ const n=Math.max(1,Math.floor((ALT-y0-RH)/RH)); sayfa.push(sat.slice(i,i+n)); i+=n; y0=SONRA; } while(i<sat.length);
+  const imgs=[];
+  for(let p=0;p<sayfa.length;p++){
+    const cv=document.createElement("canvas"); cv.width=Math.round(W*K); cv.height=Math.round(H*K);
+    const x=cv.getContext("2d"); x.scale(K,K); x.fillStyle="#fff"; x.fillRect(0,0,W,H);
+    const yaz=(t,px,py,{s=8,b=false,c="#14232b",al="left",mw=0}={})=>{ x.font=`${b?"bold ":""}${s}px ${FONT}`; x.fillStyle=c; x.textAlign=al; let tt=String(t??"");
+      if(mw&&x.measureText(tt).width>mw){ while(tt.length>1&&x.measureText(tt+"…").width>mw) tt=tt.slice(0,-1); tt+="…"; } x.fillText(tt,px,py); };
+    const cizgi=(y,c="#d6dfe2",w=.6)=>{ x.strokeStyle=c; x.lineWidth=w; x.beginPath(); x.moveTo(M,y); x.lineTo(W-M,y); x.stroke(); };
+    let y;
+    if(p===0){
+      yaz(fm.unvan||"",M,M+12,{s:12,b:true,mw:380});
+      yaz(fm.adres||"",M,M+25,{s:7.5,c:"#5a6c75",mw:380});
+      yaz([fm.vd?fm.vd+" V.D.":"",fm.vkn?"VKN "+fm.vkn:"",fm.tel?"Tel "+fm.tel:"",fm.eposta||""].filter(Boolean).join(" · "),M,M+36,{s:7.5,c:"#5a6c75",mw:380});
+      yaz("Düzenleme: "+trDate(TODAY),W-M,M+12,{s:7.5,c:"#5a6c75",al:"right"});
+      cizgi(M+45,"#1c5a78",1.5);
+      yaz("Cari hesap ekstresi",M,M+70,{s:15,b:true});
+      yaz(`${c.unvan} (${c.kod})`,M,M+88,{s:10,b:true,mw:330});
+      yaz([c.vkn?"VKN/TCKN "+c.vkn:"",c.vd?c.vd+" V.D.":""].filter(Boolean).join(" · "),M,M+101,{s:7.5,c:"#5a6c75",mw:330});
+      yaz(`Dönem: ${bas?trDate(bas):"başlangıç"} – ${trDate(bit||TODAY)} · Para birimi: ${dv}`,M,M+113,{s:7.5,c:"#5a6c75",mw:330});
+      x.fillStyle="#eaf0f2"; x.fillRect(W-M-175,M+56,175,58);
+      yaz("Kapanış bakiyesi",W-M-163,M+72,{s:7.5,c:"#5a6c75"});
+      yaz(money(Math.abs(e.son),dv),W-M-163,M+91,{s:13,b:true,mw:155});
+      yaz(Math.abs(e.son)<0.005?"Bakiye yok":e.son>0?"Borç bakiyesi (B)":"Alacak bakiyesi (A)",W-M-163,M+105,{s:7.5,c:e.son>0.004?"#b3261e":"#2e7d32"});
+      y=ILK;
+    } else { yaz(`${c.unvan} · cari hesap ekstresi (devam)`,M,M+12,{s:8,c:"#5a6c75",mw:420}); y=SONRA; }
+    x.fillStyle="#eaf0f2"; x.fillRect(M,y-10.5,W-2*M,RH);
+    let cx=M; for(const [ad,w,r] of cols){ yaz(ad.toLocaleUpperCase("tr"),r?cx+w-4:cx+4,y,{s:6.6,b:true,c:"#3d5560",al:r?"right":"left"}); cx+=w; }
+    y+=RH;
+    for(const s of sayfa[p]){
+      if(s.top) cizgi(y-10.5,"#14232b",1.1);
+      cx=M; s.h.forEach((t,k)=>{ const [,w,r]=cols[k];
+        if((s.top||s.bos)&&k===0) yaz(t,cx+4,y,{s:7.4,b:!!s.top,c:s.bos?"#5a6c75":"#14232b"});
+        else if(!((s.top||s.bos)&&k<5)) yaz(t,r?cx+w-4:cx+4,y,{s:7.4,b:!!s.top,al:r?"right":"left",mw:s.devir&&k===2?0:w-8,c:s.devir&&k===2?"#5a6c75":"#14232b"});
+        cx+=w; });
+      if(!s.top) cizgi(y+4.5);
+      y+=RH;
+    }
+    yaz(`Sayfa ${p+1} / ${sayfa.length}`,W-M,H-24,{s:7,c:"#8a9aa2",al:"right"});
+    yaz(`${fm.unvan?fm.unvan+" · ":""}SKYPRO ile oluşturuldu`,M,H-24,{s:7,c:"#8a9aa2",mw:400});
+    imgs.push(await pdfResim(cv,x));
+  }
+  return pdfJpeg(imgs,W,H);
+}
+
+/* Gmail bağlantısı: Google Identity Services ile kısa ömürlü erişim izni (yalnızca e-posta gönderme yetkisi) */
+const GM={token:"",exp:0,email:"",
+  hazir(){ return !!this.token&&Date.now()<this.exp-60000; },
+  async yukle(){ if(window.google?.accounts?.oauth2) return;
+    await new Promise((ok,no)=>{ const s=document.createElement("script"); s.src="https://accounts.google.com/gsi/client"; s.async=true; s.onload=ok; s.onerror=()=>no(new Error("Google oturum aracı yüklenemedi; internet bağlantısını kontrol edin.")); document.head.appendChild(s); }); },
+  async baglan(){ const id=emClientId(); if(!id) throw new Error("Gmail bağlantısı henüz kurulmadı (Ayarlar › Ekstre e-postası › Google istemci kimliği)."); await this.yukle();
+    return new Promise((ok,no)=>{ const tc=google.accounts.oauth2.initTokenClient({client_id:id,scope:GM_SCOPE+" openid email",hint:this.email||emAyar().hesap||undefined,
+      callback:async r=>{ if(r.error) return no(new Error(r.error_description||r.error));
+        if(!google.accounts.oauth2.hasGrantedAllScopes(r,GM_SCOPE)) return no(new Error("Gmail ile gönderme izni verilmedi. Google ekranında e-posta gönderme kutusunu işaretleyin."));
+        this.token=r.access_token; this.exp=Date.now()+(+r.expires_in||3600)*1000;
+        try{ const u=await (await fetch("https://www.googleapis.com/oauth2/v3/userinfo",{headers:{Authorization:"Bearer "+this.token}})).json(); this.email=u.email||""; }catch{}
+        ok(); },
+      error_callback:er=>no(new Error(er?.type==="popup_closed"?"Google penceresi kapatıldı.":er?.type==="popup_failed_to_open"?"Google penceresi açılamadı; tarayıcının açılır pencere engelini kaldırın.":(er?.message||"Google bağlantısı kurulamadı."))) });
+      tc.requestAccessToken(); }); },
+  async gonder(raw){ const r=await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media",{method:"POST",headers:{Authorization:"Bearer "+this.token,"Content-Type":"message/rfc822"},body:raw});
+    if(!r.ok){ let t=""; try{ t=(await r.json()).error?.message||""; }catch{} if(r.status===401) this.token=""; throw new Error(`Gmail ${r.status}${t?": "+t:""}`); } return r.json(); },
+  kes(){ try{ if(this.token&&window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(this.token,()=>{}); }catch{} this.token=""; this.exp=0; } };
+async function gmHazirla(){ if(!GM.hazir()) await GM.baglan(); const A=emAyar(); if(GM.email&&A.hesap!==GM.email){ A.hesap=GM.email; emKaydet(A); } }
+
+/* MIME iletisi: HTML gövde + PDF eki */
+const b64s = t => b64(new TextEncoder().encode(t));
+const mimeH = t => /^[\x20-\x7e]*$/.test(t)?t:`=?UTF-8?B?${b64s(t)}?=`;
+const mimeAd = t => /^[\x20-\x7e]*$/.test(t)?`"${t.replace(/["\\]/g,"")}"`:mimeH(t);
+const mimeSatir = s => s.replace(/.{1,76}/g,"$&\r\n");
+const emAdresler = s => String(s||"").split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
+const emGecerli = s => { const L=emAdresler(s); return L.length>0&&L.every(a=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a)); };
+function emMime({kime,cc,konu,html,dosya,pdf}){ const sn="skypro_"+Math.random().toString(36).slice(2), fm=S.ayar?.firma||{};
+  const bas=[GM.email?`From: ${mimeAd(fm.unvan||GM.email)} <${GM.email}>`:"",`To: ${emAdresler(kime).join(", ")}`,emAdresler(cc).length?`Cc: ${emAdresler(cc).join(", ")}`:"",
+    `Subject: ${mimeH(konu)}`,"MIME-Version: 1.0",`Content-Type: multipart/mixed; boundary="${sn}"`].filter(Boolean);
+  return [...bas,"",`--${sn}`,"Content-Type: text/html; charset=UTF-8","Content-Transfer-Encoding: base64","",mimeSatir(b64s(html)),
+    `--${sn}`,`Content-Type: application/pdf; name="${mimeH(dosya)}"`,"Content-Transfer-Encoding: base64",`Content-Disposition: attachment; filename="${mimeH(dosya)}"`,"",mimeSatir(b64(pdf)),`--${sn}--`,""].join("\r\n"); }
+function emGovde(metin,c,son,bas){ const fm=S.ayar?.firma||{};
+  return `<div style="font:14px/1.6 Arial,Helvetica,sans-serif;color:#14232b;max-width:640px">${esc(metin).replace(/\n/g,"<br>")}
+  <table style="margin-top:18px;border-collapse:collapse;font-size:13px;min-width:320px"><tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Cari</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2"><b>${esc(c.unvan)}</b> (${esc(c.kod)})</td></tr>
+  <tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Dönem</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2">${bas?trDate(bas):"başlangıç"} – ${trDate(TODAY)}</td></tr>
+  <tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Kapanış bakiyesi</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2"><b>${esc(emBakiyeYazi(son,c.doviz))}</b></td></tr></table>
+  <p style="color:#8a9aa2;font-size:11px;margin-top:20px">${esc(fm.unvan||"")}${fm.tel?" · "+esc(fm.tel):""}${fm.eposta?" · "+esc(fm.eposta):""}<br>Bu e-posta SKYPRO ön muhasebe programından gönderilmiştir. Ekstre PDF olarak ektedir.</p></div>`; }
+async function emIleti(id,A,ozel={}){ const c=S.cariler.get(id), bas=ozel.bas!==undefined?ozel.bas:emDonemBas(A.donem), e=ekstreRows(id,bas,""), v=emDegisken(c,e.son,bas);
+  const pdf=await ekstrePDF(id,bas,"");
+  return {c,son:e.son,bas,kime:ozel.kime??c.eposta??"",cc:ozel.cc??A.cc,konu:ozel.konu??emDoldur(A.konu,v),html:emGovde(ozel.metin??emDoldur(A.metin,v),c,e.son,bas),dosya:`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,pdf}; }
+function emLog(x){ const L=S.data.ekstreMailLog||(S.data.ekstreMailLog={}); L[uid("em")]={at:new Date().toISOString(),by:S.me||null,hesap:GM.email||"",...x};
+  const k=Object.keys(L); if(k.length>3000) for(const id of k.sort((a,b)=>L[a].at.localeCompare(L[b].at)).slice(0,k.length-3000)) delete L[id]; }
+async function emGonderBir(id,A,ozel,oto){ const m=await emIleti(id,A,ozel);
+  if(!emGecerli(m.kime)) throw new Error("E-posta adresi yok ya da hatalı");
+  try{ await GM.gonder(emMime(m)); emLog({cariId:id,kime:m.kime,cc:m.cc||"",bakiye:r2(m.son),doviz:m.c.doviz,donem:m.bas,durum:"ok",oto:!!oto}); }
+  catch(err){ emLog({cariId:id,kime:m.kime,cc:m.cc||"",bakiye:r2(m.son),doviz:m.c.doviz,donem:m.bas,durum:"hata",hata:String(err.message||err),oto:!!oto}); throw err; } }
+
+/* tek cariye gönderim */
+function emTekModal(id){ if(emClientId()) GM.yukle().catch(()=>{}); // Google aracı önceden yüklenir: tıklamada izin penceresi engellenmesin
+  const c=S.cariler.get(id), A=emAyar(), f=S.view.ce?.id===id?S.view.ce:{}, ekran=!!(f.bas||f.bit);
+  const bas0=emDonemBas(A.donem), v=emDegisken(c,ekstreRows(id,bas0,"").son,bas0);
+  modal("Ekstreyi e-posta ile gönder",`<form class="form" id="emF">
+    ${emClientId()?"":`<div class="notice warn small f w" style="margin:0">Gmail bağlantısı henüz kurulmadı. Ayarlar › <b>Ekstre e-postası</b> bölümünden Google istemci kimliğini girin.</div>`}
+    <div class="f w"><label for="em_k">Kime</label><input type="text" id="em_k" value="${esc(c.eposta||"")}" placeholder="ornek@firma.com (birden çok adresi virgülle ayırın)" required></div>
+    ${c.eposta?"":`<label class="f w small" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="em_kay" checked> Bu adresi cari kartına kaydet</label>`}
+    <div class="f"><label for="em_cc">Bilgi (CC)</label><input type="text" id="em_cc" value="${esc(A.cc||"")}" placeholder="İsteğe bağlı"></div>
+    <div class="f"><label for="em_d">Ekstre dönemi</label><select id="em_d">${Object.entries(EM_DONEM).map(([k,t])=>`<option value="${k}" ${A.donem===k&&!ekran?"selected":""}>${t}</option>`).join("")}${ekran?`<option value="ekran" selected>Ekrandaki aralık (${f.bas?trDate(f.bas):"başlangıç"} – ${f.bit?trDate(f.bit):"bugün"})</option>`:""}</select></div>
+    <div class="f w"><label for="em_s">Konu</label><input type="text" id="em_s" value="${esc(emDoldur(A.konu,v))}" required></div>
+    <div class="f w"><label for="em_m">Metin</label><textarea id="em_m" rows="8">${esc(emDoldur(A.metin,v))}</textarea><span class="hint">Mailin altına cari, dönem ve kapanış bakiyesi tablosu eklenir; ekstre PDF olarak ektedir.</span></div>
+    <div class="f w small muted" id="emDurum">${GM.hazir()?`Gönderen: <b>${esc(GM.email||"bağlı Gmail hesabı")}</b>`:`Gönder'e bastığınızda Google penceresi açılır; firmanın Gmail hesabıyla izin verin${A.hesap?` (son kullanılan: ${esc(A.hesap)})`:""}.`}</div>
+    <p class="err" id="mErr" hidden></p></form>`,
+    `<button class="btn" type="button" id="emPdf">PDF'i önizle</button><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="emF" id="emGo" data-w ${emClientId()?"":"disabled"}>Gönder</button></div>`);
+  const ozel=()=>{ const d=$("#em_d").value; return {bas:d==="ekran"?f.bas||"":emDonemBas(d),kime:$("#em_k").value.trim(),cc:$("#em_cc").value.trim(),konu:$("#em_s").value.trim(),metin:$("#em_m").value}; };
+  $("#em_d").addEventListener("change",()=>{ const o=ozel(), v2=emDegisken(c,ekstreRows(id,o.bas,"").son,o.bas); const t=$("#em_m"); if(!t.dataset.el) t.value=emDoldur(A.metin,v2); });
+  $("#em_m").addEventListener("input",e=>e.target.dataset.el="1");
+  $("#emPdf").addEventListener("click",async()=>{ const o=ozel(); const pdf=await ekstrePDF(id,o.bas,""), u=URL.createObjectURL(new Blob([pdf],{type:"application/pdf"}));
+    if(!window.open(u,"_blank")) saveFile(`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,new Blob([pdf],{type:"application/pdf"})); setTimeout(()=>URL.revokeObjectURL(u),120000); });
+  $("#emF").addEventListener("submit",async e=>{ e.preventDefault(); const o=ozel(), b=$("#emGo");
+    if(!emGecerli(o.kime)) return showErr("Geçerli bir e-posta adresi yazın.");
+    if(o.cc&&!emGecerli(o.cc)) return showErr("Bilgi (CC) adresi hatalı.");
+    b.disabled=true; b.textContent="Gönderiliyor…"; $("#mErr").hidden=true;
+    try{ await gmHazirla(); $("#emDurum").innerHTML=`Gönderen: <b>${esc(GM.email||"Gmail")}</b> · PDF hazırlanıyor ve gönderiliyor…`;
+      if($("#em_kay")?.checked&&!c.eposta){ S.data.cariler[id]={...S.data.cariler[id],eposta:o.kime}; }
+      await emGonderBir(id,emAyar(),o,false); closeModal(); changed(); toast(`Ekstre gönderildi: ${o.kime}`); }
+    catch(err){ changed(); b.disabled=false; b.textContent="Tekrar dene"; showErr(err.message||String(err)); } });
+}
+
+/* toplu ve otomatik gönderim */
+function emTopluModal(opt={}){ if(emClientId()) GM.yukle().catch(()=>{});
+  const oto=!!opt.oto, buAy=TODAY.slice(0,7), st={kapsam:emAyar().oto.kapsam||"bakiyeli",calisiyor:false,bitti:null};
+  let secim=null;
+  const ciz=()=>{ const A=emAyar(), L=emAdaylar(st.kapsam), ep=L.filter(x=>emGecerli(x.c.eposta)), yok=L.filter(x=>!emGecerli(x.c.eposta));
+    if(!secim) secim=new Set(ep.filter(x=>!A.haric[x.c.id]).map(x=>x.c.id));
+    for(const id of [...secim]) if(!ep.some(x=>x.c.id===id)) secim.delete(id);
+    const n=secim.size;
+    modal(oto?`${ayTam(buAy)} otomatik ekstre gönderimi`:"Toplu ekstre gönder",`<div style="display:flex;flex-direction:column;gap:12px;padding:16px 20px">
+      ${emClientId()?"":`<div class="notice warn small">Gmail bağlantısı henüz kurulmadı. Ayarlar › <b>Ekstre e-postası</b> bölümünden Google istemci kimliğini girin.</div>`}
+      ${oto?`<div class="notice small">Ayarlara göre bu ay ekstreler <b>${A.oto.gun==="son"?"ay sonunda":`ayın ${A.oto.gun}. günü`}</b> gönderilecekti. Listeyi kontrol edip gönderin; işaretini kaldırdığınız müşteriler sonraki otomatik gönderimlerde de seçilmez.</div>`:""}
+      <div class="filters" style="align-items:end"><label>Kimlere<select id="emKap" ${st.calisiyor?"disabled":""}>${Object.entries(EM_KAPSAM).map(([k,t])=>`<option value="${k}" ${st.kapsam===k?"selected":""}>${t}</option>`).join("")}</select></label>
+        <span class="small muted" style="padding-bottom:8px">Ekstre dönemi: <b>${EM_DONEM[A.donem]}</b> · ${GM.hazir()?`Gönderen: <b>${esc(GM.email||"Gmail")}</b>`:`Gönderirken Google penceresi açılır${A.hesap?` (${esc(A.hesap)})`:""}`}</span></div>
+      ${st.bitti?`<div class="notice ${st.bitti.hata.length?"warn":""} small"><b>${st.bitti.ok} ekstre gönderildi.</b>${st.bitti.hata.length?`<br>${st.bitti.hata.length} gönderilemedi:<br>${st.bitti.hata.map(h=>esc(h)).join("<br>")}`:""}</div>`:""}
+      <div class="tw" style="max-height:380px;overflow:auto"><table><thead><tr><th style="width:30px"><input type="checkbox" id="emHep" ${n&&n===ep.length?"checked":""} aria-label="Tümünü seç" ${st.calisiyor?"disabled":""}></th><th>Müşteri</th><th>E-posta</th><th class="r">Bakiye</th><th>Son gönderim</th><th id="emDurumTh"></th></tr></thead><tbody>
+      ${ep.map(({c,bak})=>{ const s=emSon(c.id); return `<tr><td><input type="checkbox" data-emc="${c.id}" ${secim.has(c.id)?"checked":""} ${st.calisiyor?"disabled":""} aria-label="${esc(c.unvan)}"></td><td class="small">${esc(c.kod)} · ${esc(c.unvan)}</td><td class="small">${esc(c.eposta)}</td><td class="r">${bal(bak,c.doviz)}</td><td class="small muted">${s?emSaat(s.at):"—"}</td><td class="small" data-emd="${c.id}"></td></tr>`; }).join("")||`<tr><td colspan="6" class="empty">Bu kapsamda e-postası olan müşteri yok.</td></tr>`}</tbody></table></div>
+      ${yok.length?`<details><summary class="small muted">E-postası olmayan ${yok.length} müşteri bu listede yok — cari kartlarına e-posta ekleyin</summary><div class="small" style="margin-top:6px">${yok.map(({c})=>`<a href="#cari-${c.id}" data-act="close">${esc(c.unvan)}</a>`).join(" · ")}</div></details>`:""}
+      <p class="small muted" style="margin:0" id="emIl"></p></div>`,
+      `${oto?`<button class="btn" id="emAtla" ${st.calisiyor?"disabled":""}>Bu ay gönderme</button>`:"<span></span>"}<div class="btns"><button class="btn" data-act="close" ${st.calisiyor?"disabled":""}>${st.bitti?"Kapat":oto?"Daha sonra":"Vazgeç"}</button>${st.bitti&&!st.bitti.hata.length?"":`<button class="btn pri" id="emTGo" data-w ${!n||st.calisiyor||!emClientId()?"disabled":""}>${st.calisiyor?"Gönderiliyor…":st.bitti?"Kalanları tekrar dene":`${n} müşteriye gönder`}</button>`}</div>`);
+    const sh=$("#overlay .sheet"); if(sh){ sh.style.maxWidth="min(1000px,96vw)"; sh.style.width="100%"; }
+    $("#emKap")?.addEventListener("change",e=>{ st.kapsam=e.target.value; secim=null; ciz(); });
+    $("#emHep")?.addEventListener("change",e=>{ for(const x of ep) e.target.checked?secim.add(x.c.id):secim.delete(x.c.id); ciz(); });
+    document.querySelectorAll("[data-emc]").forEach(k=>k.addEventListener("change",()=>{ k.checked?secim.add(k.dataset.emc):secim.delete(k.dataset.emc); const b=$("#emTGo"); if(b&&!st.bitti){ b.textContent=`${secim.size} müşteriye gönder`; b.disabled=!secim.size; } const h=$("#emHep"); if(h) h.checked=secim.size===ep.length; }));
+    $("#emAtla")?.addEventListener("click",()=>{ const A2=emAyar(); A2.oto.son=buAy; emKaydet(A2); closeModal(); toast(`${ayTam(buAy)} otomatik ekstre gönderimi atlandı`); });
+    $("#emTGo")?.addEventListener("click",async()=>{ const ids=ep.map(x=>x.c.id).filter(id=>secim.has(id)); if(!ids.length) return;
+      const A2=emAyar(); for(const x of ep) if(secim.has(x.c.id)) delete A2.haric[x.c.id]; else A2.haric[x.c.id]=true; emKaydet(A2);
+      st.calisiyor=true; ciz(); const il=$("#emIl"), b=$("#emTGo");
+      try{ await gmHazirla(); } catch(err){ st.calisiyor=false; ciz(); $("#emIl").innerHTML=`<span style="color:var(--borc)">${esc(err.message)}</span>`; return; }
+      const r=await emTopluGonder(ids,{oto,ilerleme:(i,t,c,d)=>{ const el=document.querySelector(`[data-emd="${c.id}"]`); if(el) el.innerHTML=d==="ok"?`<span style="color:var(--alacak)">✓ gönderildi</span>`:d==="hata"?`<span style="color:var(--borc)">hata</span>`:"gönderiliyor…";
+        if($("#emIl")) $("#emIl").textContent=`${Math.min(i+1,t)} / ${t} · ${c.unvan}`; }});
+      st.calisiyor=false; st.bitti=r; secim=new Set(r.hataIds);
+      if(oto&&r.ok){ const A3=emAyar(); A3.oto.son=buAy; emKaydet(A3); }
+      ciz(); toast(`${r.ok} ekstre gönderildi${r.hata.length?` · ${r.hata.length} hata`:""}`); });
+  };
+  ciz();
+}
+async function emTopluGonder(ids,{oto=false,ilerleme}={}){ const A=emAyar(); let ok=0; const hata=[], hataIds=[];
+  for(let i=0;i<ids.length;i++){ const c=S.cariler.get(ids[i]); if(!c) continue; ilerleme?.(i,ids.length,c,"");
+    try{ await emGonderBir(c.id,A,{},oto); ok++; ilerleme?.(i,ids.length,c,"ok"); }
+    catch(err){ hata.push(`${c.unvan}: ${err.message||err}`); hataIds.push(c.id); ilerleme?.(i,ids.length,c,"hata"); if(/^Gmail 40[13]/.test(err.message||"")&&!GM.hazir()) break; } }
+  changed(); return {ok,hata,hataIds}; }
+function emOtoTarih(gun,ay){ return gun==="son"?aySonu(ay):ayGunT(ay,Math.min(+gun,+aySonu(ay).slice(8))); }
+async function emOtoKontrol(){
+  if(!S.data||!S.canWrite||S._emSoruldu) return; const A=emAyar(), buAy=TODAY.slice(0,7);
+  if(!A.oto.gun||A.oto.son>=buAy||TODAY<emOtoTarih(A.oto.gun,buAy)) return;
+  const ids=emAdaylar(A.oto.kapsam).filter(x=>emGecerli(x.c.eposta)&&!A.haric[x.c.id]).map(x=>x.c.id);
+  if(!ids.length){ A.oto.son=buAy; emKaydet(A); return; }
+  if(!$("#overlay").hidden) return setTimeout(emOtoKontrol,30000);
+  S._emSoruldu=true;
+  if(A.oto.onaysiz&&GM.hazir()&&emClientId()){ const r=await emTopluGonder(ids,{oto:true}); if(r.ok){ const A2=emAyar(); A2.oto.son=buAy; emKaydet(A2); }
+    return toast(`Otomatik ekstre: ${r.ok} müşteriye gönderildi${r.hata.length?` · ${r.hata.length} hata (Ayarlar › gönderim geçmişi)`:""}`); }
+  emTopluModal({oto:true});
+}
+function emGecmisModal(){ const L=Object.values(S.data?.ekstreMailLog||{}).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,300);
+  modal("Ekstre e-postası gönderim geçmişi",`<div class="tw" style="max-height:70vh;overflow:auto"><table><thead><tr><th>Tarih</th><th>Cari</th><th>Kime</th><th class="r">Bakiye</th><th>Durum</th><th>Gönderen</th></tr></thead><tbody>
+    ${L.map(x=>`<tr><td class="mono small">${emSaat(x.at)}</td><td class="small">${esc(cariAd(x.cariId))}</td><td class="small">${esc(x.kime)}${x.cc?`<div class="muted">cc: ${esc(x.cc)}</div>`:""}</td><td class="r small">${esc(emBakiyeYazi(x.bakiye,x.doviz||"TRY"))}</td>
+      <td class="small">${x.durum==="ok"?`<span style="color:var(--alacak)">✓ gönderildi</span>`:`<span style="color:var(--borc)">Hata</span><div class="muted">${esc(x.hata||"")}</div>`}${x.oto?` <span class="pill">otomatik</span>`:""}</td><td class="small muted">${esc(x.hesap||"")}${x.by?`<div>${esc(kullaniciAd(x.by))}</div>`:""}</td></tr>`).join("")||`<tr><td colspan="6" class="empty">Henüz gönderim yok.</td></tr>`}</tbody></table></div>`,
+    `<span></span><button class="btn" data-act="close">Kapat</button>`);
+  const sh=$("#overlay .sheet"); if(sh){ sh.style.maxWidth="min(1000px,96vw)"; sh.style.width="100%"; } }
+function emPanel(){ const A=emAyar(), dis=S.canWrite?"":"disabled";
+  return `<section class="panel" id="emPanel"><header><h2>Ekstre e-postası (Gmail)</h2><span class="small muted">Müşterilere PDF ekli ekstre, firmanın kendi Gmail adresinden gider</span></header>
+  <form class="form" id="emAyForm">
+    <div class="f w" style="display:flex;flex-direction:row;gap:10px;align-items:center;flex-wrap:wrap"><span>Gmail bağlantısı: ${GM.hazir()?`<b style="color:var(--alacak)">bağlı</b> · ${esc(GM.email||"")}`:`<b>bu oturumda bağlı değil</b>${A.hesap?` <span class="muted">(son kullanılan ${esc(A.hesap)})</span>`:""}`}</span>
+      ${GM.hazir()?`<button type="button" class="btn sm" data-act="emKes">Bağlantıyı kes</button>`:`<button type="button" class="btn sm pri" data-act="emBaglan" data-w ${emClientId()?"":"disabled"}>Gmail ile bağlan</button>`}
+      <button type="button" class="btn sm" data-act="emTopluAc" data-w>Toplu gönder…</button><button type="button" class="btn sm" data-act="emGecmis">Gönderim geçmişi</button></div>
+    ${GOOGLE_CLIENT_ID?"":`<div class="f w"><label for="em_cid">Google istemci kimliği (OAuth Client ID)</label><input type="text" id="em_cid" name="clientId" value="${esc(A.clientId||"")}" placeholder="1234567890-xxxx.apps.googleusercontent.com" ${S.canEdit?"":"disabled"}><span class="hint">Bir kez kurulur; mali müşavirinizden alın.</span></div>`}
+    <div class="f w"><label for="em_ak">Konu</label><input type="text" id="em_ak" name="konu" value="${esc(A.konu)}" ${dis}></div>
+    <div class="f w"><label for="em_am">Metin</label><textarea id="em_am" name="metin" rows="7" ${dis}>${esc(A.metin)}</textarea>
+      <span class="hint">Kullanılabilecek alanlar: {hitap} (yetkili, yoksa ünvan) · {unvan} · {yetkili} · {bakiye} (örn. 12.500,00 ₺ borç) · {tarih} · {donem} · {firma}</span></div>
+    <div class="f"><label for="em_acc">Her maile bilgi (CC)</label><input type="text" id="em_acc" name="cc" value="${esc(A.cc)}" placeholder="İsteğe bağlı, örn. muhasebe adresi" ${dis}></div>
+    <div class="f"><label for="em_ad">Ekstre dönemi</label><select id="em_ad" name="donem" ${dis}>${Object.entries(EM_DONEM).map(([k,t])=>`<option value="${k}" ${A.donem===k?"selected":""}>${t}</option>`).join("")}</select></div>
+    <div class="f"><label for="em_og">Otomatik gönderim</label><select id="em_og" name="gun" ${dis}><option value="">Kapalı</option>${Array.from({length:28},(_,i)=>`<option value="${i+1}" ${String(A.oto.gun)===String(i+1)?"selected":""}>Her ayın ${i+1}. günü</option>`).join("")}<option value="son" ${A.oto.gun==="son"?"selected":""}>Her ay sonunda</option></select></div>
+    <div class="f"><label for="em_okp">Kimlere</label><select id="em_okp" name="kapsam" ${dis}>${Object.entries(EM_KAPSAM).map(([k,t])=>`<option value="${k}" ${A.oto.kapsam===k?"selected":""}>${t}</option>`).join("")}</select></div>
+    <label class="f w small" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="onaysiz" ${A.oto.onaysiz?"checked":""} ${dis}> Gmail bağlantısı açıksa onay sormadan gönder (kapalıysa program açılınca liste onaya gelir)</label>
+    <p class="small muted f w" style="margin:0;display:block">Program sunucusuz çalıştığı için gönderim, gününde ya da sonrasında program açıldığında yapılır. ${A.oto.gun?`Bu ay: ${A.oto.son>=TODAY.slice(0,7)?"<b>gönderildi / atlandı</b>":`${trDate(emOtoTarih(A.oto.gun,TODAY.slice(0,7)))} itibarıyla bekliyor`}.`:""} Google, her oturumda gönderimden önce bir kez izin penceresi açar.</p>
+    <div class="f w" data-w><button class="btn pri" type="submit">E-posta ayarlarını kaydet</button></div>
+  </form></section>`; }
+function emPanelBagla(){ if(emClientId()) GM.yukle().catch(()=>{}); $("#emAyForm")?.addEventListener("submit",e=>{ e.preventDefault(); const fd=new FormData(e.target), A=emAyar();
+  if(fd.has("clientId")&&S.canEdit) A.clientId=String(fd.get("clientId")||"").trim();
+  A.konu=String(fd.get("konu")||"").trim()||EM_VARS.konu; A.metin=String(fd.get("metin")||"")||EM_VARS.metin; A.cc=String(fd.get("cc")||"").trim(); A.donem=fd.get("donem");
+  if(A.cc&&!emGecerli(A.cc)) return toast("Bilgi (CC) adresi hatalı.");
+  const gun=fd.get("gun"); if(gun!==A.oto.gun) A.oto.son=gun&&TODAY>=emOtoTarih(gun,TODAY.slice(0,7))?TODAY.slice(0,7):A.oto.son;
+  A.oto={...A.oto,gun,kapsam:fd.get("kapsam"),onaysiz:fd.has("onaysiz")};
+  emKaydet(A); toast(gun?`E-posta ayarları kaydedildi · otomatik gönderim ${gun==="son"?"her ay sonunda":`her ayın ${gun}. günü`}`:"E-posta ayarları kaydedildi"); }); }
+Object.assign(ACT,{
+  emTek:el=>emTekModal(el.dataset.id),
+  emTopluAc:()=>emTopluModal(),
+  emGecmis:()=>emGecmisModal(),
+  emBaglan:async()=>{ try{ await gmHazirla(); toast(`Gmail bağlandı: ${GM.email||""}`); }catch(err){ toast(err.message||String(err)); } render(); },
+  emKes:()=>{ GM.kes(); toast("Gmail bağlantısı kesildi"); render(); } });
+
 /* ---------- yapılacak işler ---------- */
 const IS_ONC={yuksek:"Yüksek",normal:"Normal",dusuk:"Düşük"}, IS_TEKRAR={"":"Tekrarlamaz",hafta:"Her hafta",ay:"Her ay",ceyrek:"Her 3 ayda bir",yil:"Her yıl"};
 const isler = () => S.data.isler||(S.data.isler={});
@@ -3320,7 +3594,7 @@ function tkOtoKontrol(){
   if(msg.length) toast("Otomatik tahakkuk yapıldı · "+msg.join(" · "));
   else if(uyari.length) toast(uyari.join(" · "));
 }
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden) setTimeout(tkOtoKontrol,1500); });
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ setTimeout(tkOtoKontrol,1500); setTimeout(emOtoKontrol,3000); } });
 Object.assign(ACT,{
   tkYap:()=>tkYapModal(),
   tkSecYap:el=>{ const tip=el.dataset.tip, sec=tkSec(tip); if(!sec.size) return toast("Önce tablodan satır seçin."); tkYapModal({[tip]:new Set(sec)}); },
@@ -3669,7 +3943,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.9.4-önizleme";
+const SURUM="1.9.5-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
