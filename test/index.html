@@ -2670,7 +2670,7 @@ Object.assign(ACT,{ islemKopya:el=>{ closeModal(); islemForm({kopya:el.dataset.i
 Object.assign(ACT,{ topluSil:()=>topluSilModal(), topluDegistir:()=>topluDegistirModal(), secTemizle:()=>{ S.sec.clear(); document.querySelectorAll("[data-sec],[data-secall]").forEach(x=>{ x.checked=false; x.indeterminate=false; x.closest("tr")?.classList.remove("secili"); }); secCubukGuncelle(); } });
 
 /* ---------- ekstre e-postası: firmanın Gmail hesabından PDF ekli ekstre gönderimi ---------- */
-const GOOGLE_CLIENT_ID=""; // Google Cloud'daki OAuth istemci kimliği (tüm firmalar için ortak); boşsa Ayarlar'dan girilir
+const GOOGLE_CLIENT_ID="587201683026-9upvkeso90sitflothgsum5ser7bqpfc.apps.googleusercontent.com"; // Google Cloud'daki OAuth istemci kimliği (tüm firmalar için ortak); boşsa Ayarlar'dan girilir
 const GM_SCOPE="https://www.googleapis.com/auth/gmail.send";
 const EM_DONEM={ay1:"Son 1 ay",ay3:"Son 3 ay",ay6:"Son 6 ay",ay12:"Son 12 ay",yil:"Yıl başından bugüne",tum:"Tüm hareketler"};
 const EM_KAPSAM={bakiyeli:"Bakiyesi olan müşteriler",borclu:"Borçlu (B) müşteriler",tumu:"E-postası olan tüm müşteriler"};
@@ -3943,7 +3943,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.9.5-önizleme";
+const SURUM="1.9.6-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
