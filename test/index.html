@@ -1069,7 +1069,7 @@ function vCariler(){
   :`<div class="empty">${S.cariler.size?"Filtreye uyan cari yok.":"Henüz cari kartı yok. Sağ üstten <b>Yeni cari</b> ile başlayın."}</div>`}</section>
   <p class="small muted">B: cari bize borçlu (alacağımız) · A: cari alacaklı (borcumuz). Dövizli carilerde TL karşılığı Ayarlar'daki güncel kurla hesaplanır.</p>
   ${cariAktarimPanel()}`;
-  return {title:"Cari hesaplar",btns:`<button class="btn" data-act="emTopluAc" data-w title="Müşterilere PDF ekli ekstreyi e-posta ile gönder">📧 Toplu ekstre gönder</button>${WA_ACIK?`<button class="btn" data-act="waTopluAc" data-w title="Müşterilere bakiye mesajını WhatsApp ile gönder">💬 Toplu WhatsApp</button>`:""}<button class="btn" data-act="cariAktar" data-w>Excel'den cari al</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
+  return {title:"Cari hesaplar",btns:`${modulAcik("ekstreMail")?`<button class="btn" data-act="emTopluAc" data-w title="Müşterilere PDF ekli ekstreyi e-posta ile gönder">📧 Toplu ekstre gönder</button>`:""}${WA_ACIK&&modulAcik("ekstreMail")?`<button class="btn" data-act="waTopluAc" data-w title="Müşterilere bakiye mesajını WhatsApp ile gönder">💬 Toplu WhatsApp</button>`:""}<button class="btn" data-act="cariAktar" data-w>Excel'den cari al</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
     after(){
       $("#cfq").addEventListener("input",e=>{f.q=e.target.value; const p=e.target.selectionStart; render(); const i=$("#cfq"); i.focus(); i.setSelectionRange(p,p);});
       $("#cftip").addEventListener("change",e=>{f.tip=e.target.value;render();});
@@ -1146,12 +1146,12 @@ function vCariDetay(id){
   <section class="panel"><header><h2>Cari kartı</h2><button class="btn sm" data-act="cariForm" data-id="${id}" data-w>Düzenle</button></header><div class="pad">
     <dl class="info"><dt>Kod</dt><dd class="mono">${esc(c.kod)}</dd><dt>Tip</dt><dd>${CTIP[c.tip]||"—"} · ${c.doviz}</dd>
     ${c.vkn?`<dt>VKN/TCKN</dt><dd class="mono">${esc(c.vkn)}${c.vd?" · "+esc(c.vd):""}</dd>`:""}
-    ${c.yetkili?`<dt>Yetkili</dt><dd>${esc(c.yetkili)}</dd>`:""}${c.tel?`<dt>Telefon</dt><dd>${esc(c.tel)}</dd>`:""}${c.eposta?`<dt>E-posta</dt><dd>${esc(c.eposta)}</dd>`:""}${(()=>{ const s=emSon(id), w=emSon(id,"whatsapp"); return (s?`<dt>Son ekstre maili</dt><dd class="small">${emSaat(s.at)} · ${esc(s.kime)}</dd>`:"")+(w?`<dt>Son WhatsApp</dt><dd class="small">${emSaat(w.at)} · ${esc(w.kime)}</dd>`:""); })()}
+    ${c.yetkili?`<dt>Yetkili</dt><dd>${esc(c.yetkili)}</dd>`:""}${c.tel?`<dt>Telefon</dt><dd>${esc(c.tel)}</dd>`:""}${c.eposta?`<dt>E-posta</dt><dd>${esc(c.eposta)}</dd>`:""}${(()=>{ if(!modulAcik("ekstreMail")) return ""; const s=emSon(id), w=emSon(id,"whatsapp"); return (s?`<dt>Son ekstre maili</dt><dd class="small">${emSaat(s.at)} · ${esc(s.kime)}</dd>`:"")+(w?`<dt>Son WhatsApp</dt><dd class="small">${emSaat(w.at)} · ${esc(w.kime)}</dd>`:""); })()}
     ${c.adres?`<dt>Adres</dt><dd>${esc(c.adres)}</dd>`:""}${c.iban?`<dt>IBAN</dt><dd class="mono small">${esc(c.iban)}</dd>`:""}${c.not?`<dt>Not</dt><dd>${esc(c.not)}</dd>`:""}</dl>
   </div></section></div>
   <section class="panel"><header><h2>Hesap ekstresi</h2><div class="filters">
     <label>Başlangıç<input type="date" id="ceb" value="${f.bas}"></label><label>Bitiş<input type="date" id="cet" value="${f.bit}"></label>
-    <button class="btn" data-act="ekstreX" data-id="${id}">Excel</button><button class="btn" data-act="ekstreH" data-id="${id}">Yazdırılabilir ekstre</button><button class="btn" data-act="mutabakat" data-id="${id}">Mutabakat mektubu</button><button class="btn" data-act="emTek" data-id="${id}" data-w title="Ekstreyi PDF olarak cariye e-posta ile gönder">📧 E-posta ile gönder</button>${WA_ACIK?`<button class="btn" data-act="waTek" data-id="${id}" data-w title="Bakiye mesajını ve ekstreyi WhatsApp ile gönder">💬 WhatsApp</button>`:""}
+    <button class="btn" data-act="ekstreX" data-id="${id}">Excel</button><button class="btn" data-act="ekstreH" data-id="${id}">Yazdırılabilir ekstre</button><button class="btn" data-act="mutabakat" data-id="${id}">Mutabakat mektubu</button>${modulAcik("ekstreMail")?`<button class="btn" data-act="emTek" data-id="${id}" data-w title="Ekstreyi PDF olarak cariye e-posta ile gönder">📧 E-posta ile gönder</button>`:""}${WA_ACIK&&modulAcik("ekstreMail")?`<button class="btn" data-act="waTek" data-id="${id}" data-w title="Bakiye mesajını ve ekstreyi WhatsApp ile gönder">💬 WhatsApp</button>`:""}
   </div></header>
   ${secCubukYer()}<div class="tw"><table><thead><tr>${secTh(e.rows.map(r=>r.h.id))}<th>Tarih</th><th>Belge no</th><th>İşlem</th><th>Açıklama</th><th>Vade</th><th class="r">Borç</th><th class="r">Alacak</th><th class="r">Bakiye</th></tr>
   ${ekstreFiltreSatir(f.flt,tumRows,fAktif,tumSatir,e.rows.length)}</thead><tbody>
@@ -1374,7 +1374,7 @@ function vAyar(){
     <p class="small muted" style="margin:0">İndirilen dosya şifreli kalır. Mali müşavir kendi programında <b>Dosyadan ekle</b> ile alır ve kendi yönetici parolasıyla açar.</p>
   </div></section>
   ${S.canWrite?belgeNoPanel():""}
-  ${emPanel()}
+  ${modulAcik("ekstreMail")?emPanel():""}
   ${S.canEdit?modulPanel():""}
   ${turPanel()}
   ${S.canEdit?kullaniciPanel():""}
@@ -2900,7 +2900,7 @@ async function emTopluGonder(ids,{oto=false,ilerleme}={}){ const A=emAyar(); let
   changed(); return {ok,hata,hataIds}; }
 function emOtoTarih(gun,ay){ return gun==="son"?aySonu(ay):ayGunT(ay,Math.min(+gun,+aySonu(ay).slice(8))); }
 async function emOtoKontrol(){
-  if(!S.data||!S.canWrite||S._emSoruldu) return; const A=emAyar(), buAy=TODAY.slice(0,7);
+  if(!S.data||!S.canWrite||S._emSoruldu||!modulAcik("ekstreMail")) return; const A=emAyar(), buAy=TODAY.slice(0,7);
   if(!A.oto.gun||A.oto.son>=buAy||TODAY<emOtoTarih(A.oto.gun,buAy)) return;
   const ids=emAdaylar(A.oto.kapsam).filter(x=>emGecerli(x.c.eposta)&&!A.haric[x.c.id]).map(x=>x.c.id);
   if(!ids.length){ A.oto.son=buAy; emKaydet(A); return; }
@@ -3710,6 +3710,8 @@ function modulPanel(){
   return `<section class="panel" data-admin><header><h2>Ek modüller</h2><span class="small muted">Yalnızca bu firmada görünür; diğer firmaları etkilemez</span></header><div class="pad">
     <label style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-modul="tahakkuk" ${modulAcik("tahakkuk")?"checked":""} style="margin-top:3px">
     <span><b>Aylık tahakkuk</b><br><span class="small muted">Müşterilerinizden her ay alacağınız ücretleri ve her ay ödediğiniz kira, abonelik gibi giderleri bir tabloda tutar; ay sonunda hepsini ya da seçtiklerinizi carilere işler. Mali müşavirlik bürosunun kendi firması için.</span></span></label>
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="ekstreMail" ${modulAcik("ekstreMail")?"checked":""} style="margin-top:3px">
+    <span><b>Ekstre e-postası (Gmail)</b><br><span class="small muted">Müşterilere PDF ekli cari ekstresini firmanın Gmail adresinden tek tek, toplu ya da her ay otomatik gönderir. Firmanın Gmail adresinin Google tarafında izinli listeye eklenmiş olması gerekir.</span></span></label>
   </div></section>`;
 }
 
@@ -4011,7 +4013,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.9.9-önizleme";
+const SURUM="1.10.0-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
