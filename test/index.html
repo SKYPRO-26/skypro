@@ -627,6 +627,7 @@ async function hdrAc(f,data){ const ku={}; for(const u of Object.keys(data.kulla
 const slug = s => (String(s||"firma").toLocaleLowerCase("tr").replace(/ı/g,"i").replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ö/g,"o").replace(/ç/g,"c").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40))||"firma";
 const yeniDosyaAdi = () => "firma-"+Array.from(rnd(5),b=>"abcdefghjkmnpqrstuvwxyz23456789"[b%31]).join("")+".skypro.json";
 
+const WA_ACIK=/\/test\//.test(location.pathname); // WhatsApp ile ekstre: şimdilik yalnızca önizlemede
 const DRIVE_ACIK=false; // Google Drive ile firma başına klasör paylaşımı: şimdilik kapalı
 /* klasör */
 function klasorHata(t){ startShow(panel("",`<div class="pad" style="display:flex;flex-direction:column;gap:12px"><div class="notice bad">${esc(t)}</div>
@@ -1068,7 +1069,7 @@ function vCariler(){
   :`<div class="empty">${S.cariler.size?"Filtreye uyan cari yok.":"Henüz cari kartı yok. Sağ üstten <b>Yeni cari</b> ile başlayın."}</div>`}</section>
   <p class="small muted">B: cari bize borçlu (alacağımız) · A: cari alacaklı (borcumuz). Dövizli carilerde TL karşılığı Ayarlar'daki güncel kurla hesaplanır.</p>
   ${cariAktarimPanel()}`;
-  return {title:"Cari hesaplar",btns:`<button class="btn" data-act="emTopluAc" data-w title="Müşterilere PDF ekli ekstreyi e-posta ile gönder">📧 Toplu ekstre gönder</button><button class="btn" data-act="waTopluAc" data-w title="Müşterilere bakiye mesajını WhatsApp ile gönder">💬 Toplu WhatsApp</button><button class="btn" data-act="cariAktar" data-w>Excel'den cari al</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
+  return {title:"Cari hesaplar",btns:`<button class="btn" data-act="emTopluAc" data-w title="Müşterilere PDF ekli ekstreyi e-posta ile gönder">📧 Toplu ekstre gönder</button>${WA_ACIK?`<button class="btn" data-act="waTopluAc" data-w title="Müşterilere bakiye mesajını WhatsApp ile gönder">💬 Toplu WhatsApp</button>`:""}<button class="btn" data-act="cariAktar" data-w>Excel'den cari al</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
     after(){
       $("#cfq").addEventListener("input",e=>{f.q=e.target.value; const p=e.target.selectionStart; render(); const i=$("#cfq"); i.focus(); i.setSelectionRange(p,p);});
       $("#cftip").addEventListener("change",e=>{f.tip=e.target.value;render();});
@@ -1150,7 +1151,7 @@ function vCariDetay(id){
   </div></section></div>
   <section class="panel"><header><h2>Hesap ekstresi</h2><div class="filters">
     <label>Başlangıç<input type="date" id="ceb" value="${f.bas}"></label><label>Bitiş<input type="date" id="cet" value="${f.bit}"></label>
-    <button class="btn" data-act="ekstreX" data-id="${id}">Excel</button><button class="btn" data-act="ekstreH" data-id="${id}">Yazdırılabilir ekstre</button><button class="btn" data-act="mutabakat" data-id="${id}">Mutabakat mektubu</button><button class="btn" data-act="emTek" data-id="${id}" data-w title="Ekstreyi PDF olarak cariye e-posta ile gönder">📧 E-posta ile gönder</button><button class="btn" data-act="waTek" data-id="${id}" data-w title="Bakiye mesajını ve ekstreyi WhatsApp ile gönder">💬 WhatsApp</button>
+    <button class="btn" data-act="ekstreX" data-id="${id}">Excel</button><button class="btn" data-act="ekstreH" data-id="${id}">Yazdırılabilir ekstre</button><button class="btn" data-act="mutabakat" data-id="${id}">Mutabakat mektubu</button><button class="btn" data-act="emTek" data-id="${id}" data-w title="Ekstreyi PDF olarak cariye e-posta ile gönder">📧 E-posta ile gönder</button>${WA_ACIK?`<button class="btn" data-act="waTek" data-id="${id}" data-w title="Bakiye mesajını ve ekstreyi WhatsApp ile gönder">💬 WhatsApp</button>`:""}
   </div></header>
   ${secCubukYer()}<div class="tw"><table><thead><tr>${secTh(e.rows.map(r=>r.h.id))}<th>Tarih</th><th>Belge no</th><th>İşlem</th><th>Açıklama</th><th>Vade</th><th class="r">Borç</th><th class="r">Alacak</th><th class="r">Bakiye</th></tr>
   ${ekstreFiltreSatir(f.flt,tumRows,fAktif,tumSatir,e.rows.length)}</thead><tbody>
@@ -2916,7 +2917,7 @@ function emGecmisModal(){ const L=Object.values(S.data?.ekstreMailLog||{}).sort(
     `<span></span><button class="btn" data-act="close">Kapat</button>`);
   const sh=$("#overlay .sheet"); if(sh){ sh.style.maxWidth="min(1000px,96vw)"; sh.style.width="100%"; } }
 function emPanel(){ const A=emAyar(), dis=S.canWrite?"":"disabled";
-  return `<section class="panel" id="emPanel"><header><h2>Ekstre e-postası (Gmail) ve WhatsApp</h2><span class="small muted">Müşterilere PDF ekli ekstre, firmanın kendi Gmail adresinden gider</span></header>
+  return `<section class="panel" id="emPanel"><header><h2>Ekstre e-postası (Gmail)${WA_ACIK?" ve WhatsApp":""}</h2><span class="small muted">Müşterilere PDF ekli ekstre, firmanın kendi Gmail adresinden gider</span></header>
   <form class="form" id="emAyForm">
     <div class="f w" style="display:flex;flex-direction:row;gap:10px;align-items:center;flex-wrap:wrap"><span>Gmail bağlantısı: ${GM.hazir()?`<b style="color:var(--alacak)">bağlı</b> · ${esc(GM.email||"")}`:`<b>bu oturumda bağlı değil</b>${A.hesap?` <span class="muted">(son kullanılan ${esc(A.hesap)})</span>`:""}`}</span>
       ${GM.hazir()?`<button type="button" class="btn sm" data-act="emKes">Bağlantıyı kes</button>`:`<button type="button" class="btn sm pri" data-act="emBaglan" data-w ${emClientId()?"":"disabled"}>Gmail ile bağlan</button>`}
@@ -2925,7 +2926,7 @@ function emPanel(){ const A=emAyar(), dis=S.canWrite?"":"disabled";
     <div class="f w"><label for="em_ak">Konu</label><input type="text" id="em_ak" name="konu" value="${esc(A.konu)}" ${dis}></div>
     <div class="f w"><label for="em_am">Metin</label><textarea id="em_am" name="metin" rows="7" ${dis}>${esc(A.metin)}</textarea>
       <span class="hint">Kullanılabilecek alanlar: {hitap} (yetkili, yoksa ünvan) · {unvan} · {yetkili} · {bakiye} (örn. 12.500,00 ₺ borç) · {tarih} · {donem} · {firma}</span></div>
-    <div class="f w"><label for="em_wa">WhatsApp mesajı</label><textarea id="em_wa" name="waMetin" rows="5" ${dis}>${esc(A.waMetin||WA_VARS)}</textarea><span class="hint">Aynı alanlar kullanılır. *yıldız arası* WhatsApp'ta kalın görünür. WhatsApp gönderimi her mesajda sizin onayınızla yapılır; otomatik gönderim yalnızca e-postada vardır.</span></div>
+    ${WA_ACIK?"":"<!--"}<div class="f w"><label for="em_wa">WhatsApp mesajı</label><textarea id="em_wa" name="waMetin" rows="5" ${dis}>${esc(A.waMetin||WA_VARS)}</textarea><span class="hint">Aynı alanlar kullanılır. *yıldız arası* WhatsApp'ta kalın görünür. WhatsApp gönderimi her mesajda sizin onayınızla yapılır; otomatik gönderim yalnızca e-postada vardır.</span></div>${WA_ACIK?"":"-->"}
     <div class="f"><label for="em_acc">Her maile bilgi (CC)</label><input type="text" id="em_acc" name="cc" value="${esc(A.cc)}" placeholder="İsteğe bağlı, örn. muhasebe adresi" ${dis}></div>
     <div class="f"><label for="em_ad">Ekstre dönemi</label><select id="em_ad" name="donem" ${dis}>${Object.entries(EM_DONEM).map(([k,t])=>`<option value="${k}" ${A.donem===k?"selected":""}>${t}</option>`).join("")}</select></div>
     <div class="f"><label for="em_og">Otomatik gönderim</label><select id="em_og" name="gun" ${dis}><option value="">Kapalı</option>${Array.from({length:28},(_,i)=>`<option value="${i+1}" ${String(A.oto.gun)===String(i+1)?"selected":""}>Her ayın ${i+1}. günü</option>`).join("")}<option value="son" ${A.oto.gun==="son"?"selected":""}>Her ay sonunda</option></select></div>
@@ -4010,7 +4011,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.9.8-önizleme";
+const SURUM="1.9.9-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
