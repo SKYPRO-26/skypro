@@ -437,7 +437,7 @@ function compute(){
     c.acik=[]; if(Math.abs(c.bak)<0.005) continue;
     const yon=c.bak>0?"b":"a"; let kalan=Math.abs(c.bak);
     const items=c.list.filter(h=>yon==="b"?cariBorc(h)>0:cariAlacak(h)>0).slice().reverse();
-    for(const h of items){ if(kalan<=0.004) break; const t=yon==="b"?cariBorc(h):cariAlacak(h); const p=Math.min(t,kalan); c.acik.push({h,yon,acik:r2(p),vade:h.vade||h.tarih}); kalan-=p; }
+    for(const h of items){ if(kalan<=0.004) break; const t=yon==="b"?cariBorc(h):cariAlacak(h); const p=Math.min(t,kalan); c.acik.push({h,yon,acik:r2(p),vade:h.vade||(h.cekId&&S.cekler.get(h.cekId)?.vade)||h.tarih}); kalan-=p; }
     if(kalan>0.004) c.acik.push({h:null,yon,acik:r2(kalan),vade:null});
     c.yas=yaslandir(c.acik);
   }
@@ -470,7 +470,8 @@ function vadeOlaylari(faturaDahil=true){
   }
   if(faturaDahil) for(const [id,c] of S.D.cari){
     const doviz=S.cariler.get(id)?.doviz||"TRY";
-    for(const k of c.acik){ if(!k.h) continue; ev.push({vade:k.vade,yon:k.yon==="b"?"in":"out",tutar:k.acik,doviz,tip:k.yon==="b"?"Açık alacak":"Açık borç",ad:cariAd(id),ref:"cari",id,no:k.h.belgeNo||TUR[k.h.tur]}); }
+    // tahsilat/ödemeden kalan açık kısım avanstır, nakit akışı değildir (çekliyse çekin kendisi vadesinde zaten listelenir)
+    for(const k of c.acik){ if(!k.h||["tahsilat","odeme"].includes(k.h.tur)) continue; ev.push({vade:k.vade,yon:k.yon==="b"?"in":"out",tutar:k.acik,doviz,tip:k.yon==="b"?"Açık alacak":"Açık borç",ad:cariAd(id),ref:"cari",id,no:k.h.belgeNo||TUR[k.h.tur]}); }
   }
   return ev.sort((a,b)=>(a.vade||"").localeCompare(b.vade||""));
 }
@@ -4183,7 +4184,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.11.3-önizleme";
+const SURUM="1.11.4-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
