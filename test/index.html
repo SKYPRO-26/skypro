@@ -3057,13 +3057,17 @@ async function tmTara(klasorId){ // müşteri klasöründe yalnızca BEYANNAMELE
       if(f.mimeType===FOLDER){ const n=tmNorm(f.name); if(x.d===0&&!/^(BEYANNAMELER|SGK)$/.test(n)) continue; if(/ÇALIŞMA|TASLAK|ESKİ/.test(n)) continue; if(x.d<3) kuyruk.push({id:f.id,yol,d:x.d+1}); }
       else if(/\.pdf$/i.test(f.name)||f.mimeType==="application/pdf") out.push({...f,yol:x.yol}); } }
   return out; }
+// klasör grubu: aylık (KDV, muhtasar, SGK…) seçilen aya göre; dönemsel (geçici, kurumlar/gelir, turizm, konaklama, damga) kendi dönemine ya da beyan tarihine göre
+const TM_DONEMSEL=/GEÇİCİ|KURUMLAR|GELİR\s*VERG|YILLIK|TURİZM|KONAKLAMA|DAMGA/;
 async function tmCariTara(c,ay){ const yil=ay.slice(0,4), K=await tmMusteriKlasorleri(yil), k=tmEsle(c,K,yil);
   if(!k) return {klasor:null,dosyalar:[]};
-  const L=await tmTara(k.id), sonrakiBas=ayKaydir(ay,1)+"-01", sonrakiBit=aySonu(ayKaydir(ay,2)), d=[];
-  for(const f of L){ const tur=tmTur(f); if(!tur) continue; const dn=tmDonem(f.name,yil);
-    if(dn&&dn.bit===ay) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:tur!=="sgk",turBelirsiz:tur==="sgk",boyut:+f.size||0});
-    else if(!dn){ const t=(f.createdTime||f.modifiedTime||"").slice(0,10); if(t>=sonrakiBas&&t<=sonrakiBit) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:false,belirsiz:true,boyut:+f.size||0}); } }
-  const sira={tahakkuk:0,hizmet:1,sgk:2}; d.sort((a,b)=>sira[a.tur]-sira[b.tur]||a.ad.localeCompare(b.ad,"tr"));
+  const L=await tmTara(k.id), pBas=ayKaydir(ay,1)+"-01", pBit=aySonu(ayKaydir(ay,2)), d=[];
+  for(const f of L){ const tur=tmTur(f)||"diger", dn=tmDonem(f.name,yil), donemsel=TM_DONEMSEL.test(tmNorm(f.yol)+" "+tmNorm(f.name)), t=(f.createdTime||f.modifiedTime||"").slice(0,10), pencere=t>=pBas&&t<=pBit;
+    const onerilen=tur==="tahakkuk"||tur==="hizmet";
+    if(!onerilen&&/BEYANNAME|D[İI]LEKÇE/.test(f.name.toLocaleUpperCase("tr"))) continue; // beyanname ve dilekçeler listelenmez
+    if(dn&&dn.bit===ay) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:onerilen,boyut:+f.size||0});
+    else if(!dn&&pencere&&(donemsel||tur!=="diger")) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:onerilen&&donemsel,belirsiz:true,boyut:+f.size||0}); }
+  const sira={tahakkuk:0,hizmet:1,sgk:2,diger:3}; d.sort((a,b)=>(a.yol||"").localeCompare(b.yol||"","tr")||sira[a.tur]-sira[b.tur]||a.ad.localeCompare(b.ad,"tr"));
   return {klasor:k,dosyalar:d}; }
 const tmSon = (cid,ay) => Object.values(S.data?.ekstreMailLog||{}).filter(x=>x.kanal==="tahakkuk"&&x.cariId===cid&&x.donem===ay&&x.durum==="ok").sort((a,b)=>b.at.localeCompare(a.at))[0];
 const tmListe = d => d.map(x=>"• "+x.ad.replace(/\.pdf$/i,"")).join("\n");
@@ -3093,15 +3097,16 @@ function vTahakkukGonder(){
       <td class="small">${emGecerli(c.eposta)?esc(c.eposta):`<span style="color:var(--borc)">e-posta yok</span>`}</td>
       <td class="small">${dsy}</td>
       <td class="small" data-tmd="${c.id}">${son?`<span style="color:var(--alacak)">✓ ${emSaat(son.at)}</span>`:r?.gonderim||""}</td></tr>
-      ${ac&&r?.dosyalar?`<tr><td></td><td colspan="5" style="background:var(--surface-2)">${r.dosyalar.length?r.dosyalar.map((x,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" data-tmdos="${c.id}" data-i="${i}" ${x.sec?"checked":""}>
-        <span>${x.tur==="hizmet"?"📋":x.tur==="sgk"?"📄":"🧾"} ${esc(x.ad)} <span class="muted">· ${esc(x.yol)}${x.belirsiz?" · dönemi addan anlaşılamadı, tarihine göre listelendi":""}${x.turBelirsiz?" · SGK belgesi, türü addan anlaşılamadı; göndermek isterseniz işaretleyin":""}</span></span> <a href="https://drive.google.com/file/d/${x.id}/view" target="_blank" rel="noopener" class="small">aç</a></label>`).join(""):`<span class="muted small">Bu dönem için adında "TAHAKKUK", "THK" ya da "HİZMET LİSTESİ" geçen dosya bulunamadı.</span>`}</td></tr>`:""}`; };
+      ${ac&&r?.dosyalar?`<tr><td></td><td colspan="5" style="background:var(--surface-2)">${r.dosyalar.length?`<div style="display:flex;gap:6px;margin-bottom:6px"><button class="btn sm" data-tmhep="${c.id}" data-v="1">Tümünü seç</button><button class="btn sm" data-tmhep="${c.id}" data-v="0">Hiçbirini seçme</button><button class="btn sm" data-tmhep="${c.id}" data-v="oner">Önerilenler</button></div>`+
+        [...new Set(r.dosyalar.map(x=>x.yol))].map(g=>`<div class="small" style="font-weight:600;margin:8px 0 2px;color:var(--muted)">📁 ${esc(g||"—")}</div>`+r.dosyalar.map((x,i)=>x.yol!==g?"":`<label style="display:flex;gap:8px;align-items:center;padding:3px 0 3px 14px"><input type="checkbox" data-tmdos="${c.id}" data-i="${i}" ${x.sec?"checked":""}>
+        <span>${x.tur==="hizmet"?"📋":x.tur==="tahakkuk"?"🧾":"📄"} ${esc(x.ad)}${x.belirsiz?` <span class="muted">· dönemi addan anlaşılamadı, beyan tarihine göre geldi</span>`:""}</span> <a href="https://drive.google.com/file/d/${x.id}/view" target="_blank" rel="noopener" class="small">aç</a></label>`).join("")).join(""):`<span class="muted small">Bu dönem için dosya bulunamadı.</span>`}</td></tr>`:""}`; };
   const html=`<section class="panel"><div class="pad" style="display:flex;flex-direction:column;gap:12px">
     <div class="filters" style="align-items:end">
       <label>Dönem<input type="month" id="tm_ay" value="${f.ay}"></label>
       <label>Ara<input type="search" id="tm_q" value="${esc(f.q)}" placeholder="Müşteri, kod, VKN"></label>
       <label style="flex-direction:row;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="tm_ep" ${f.sadeceEposta?"checked":""}> Yalnızca e-postası olanlar</label>
     </div>
-    <div class="small muted">Drive'da <b>${esc(A.kok.replace("{yil}",f.ay.slice(0,4)))}</b> › müşteri klasörü › <b>BEYANNAMELER</b> ve <b>SGK</b> altındaki, adında <b>TAHAKKUK</b>/<b>THK</b> geçen ve SGK klasöründeki hizmet listesi (<b>HZM</b>, <b>HİZMET</b>, <b>APHB</b>, <b>LİSTE</b>…) olan ve dönemi <b>${ayTam(f.ay)}</b> olan PDF'ler bulunur (örn. <span class="mono">${f.ay.slice(5)}-${f.ay.slice(0,4)} KDV TAHAKKUK.pdf</span>; 3 aylık dosyalar çeyreğin son ayında gelir).</div>
+    <div class="small muted">Drive'da <b>${esc(A.kok.replace("{yil}",f.ay.slice(0,4)))}</b> › müşteri klasörü › <b>BEYANNAMELER</b> ve <b>SGK</b> altındaki PDF'ler getirilir: KDV, muhtasar ve SGK <b>${ayTam(f.ay)}</b> dosyaları; geçici vergi, kurumlar/gelir vergisi, turizm payı ve konaklama dosyaları kendi dönemine göre (dönemi adında yazmıyorsa beyan tarihine göre). Beyanname ve dilekçeler listelenmez. Tahakkuk ve hizmet listeleri işaretli gelir; maile yalnızca işaretlediğiniz dosyalar eklenir.</div>
     <div class="btns" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn" id="tmAra" ${TM.calisiyor?"disabled":""}>🔎 ${Object.keys(f.sec).length?"Seçilenleri":"Listedekileri"} Drive'da ara</button>
       <button class="btn pri" id="tmGo" data-w ${TM.calisiyor||!dosyaliSec.length?"disabled":""}>📧 ${dosyaliSec.length} müşteriye gönder</button>
       <span class="small muted" id="tmIl" style="align-self:center">${taranan.length?`${taranan.length} müşteri arandı`:""}</span></div>
@@ -3125,6 +3130,7 @@ function vTahakkukGonder(){
     document.querySelectorAll("[data-tmsec]").forEach(k=>k.addEventListener("change",()=>{ k.checked?f.sec[k.dataset.tmsec]=1:delete f.sec[k.dataset.tmsec]; yenile(); }));
     document.querySelectorAll("[data-tmac]").forEach(b=>b.addEventListener("click",()=>{ const id=b.dataset.tmac; f.acik[id]=!f.acik[id]; yenile(); }));
     document.querySelectorAll("[data-tmdos]").forEach(k=>k.addEventListener("change",()=>{ S0[k.dataset.tmdos].dosyalar[+k.dataset.i].sec=k.checked; yenile(); }));
+    document.querySelectorAll("[data-tmhep]").forEach(b=>b.addEventListener("click",()=>{ const v=b.dataset.v; for(const x of S0[b.dataset.tmhep].dosyalar) x.sec=v==="oner"?(x.tur==="tahakkuk"||x.tur==="hizmet")&&!x.belirsiz:v==="1"; yenile(); }));
     document.querySelectorAll("[data-tmkls]").forEach(b=>b.addEventListener("click",()=>tmKlasorSec(b.dataset.tmkls,f.ay)));
     $("#tmSab").addEventListener("toggle",e=>f.sablon=e.target.open);
     $("#tmAyF").addEventListener("submit",e=>{ e.preventDefault(); const fd=new FormData(e.target), a=tmAyar();
@@ -4177,7 +4183,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.11.2-önizleme";
+const SURUM="1.11.3-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
