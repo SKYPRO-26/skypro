@@ -309,6 +309,7 @@ tr.secili td{background:var(--accent-soft)!important}
       <li><a href="#hizli-giris">Hızlı kayıt</a></li>
       <li><a href="#cariler">Cari hesaplar</a></li>
       <li id="navTk" hidden><a href="#tahakkuk">Aylık tahakkuk</a></li>
+      <li id="navTm" hidden><a href="#tahakkuk-gonder">Tahakkuk gönderimi</a></li>
       <li><a href="#islemler">Tahsilat ve ödeme</a></li>
       <li><a href="#cek-senet">Çek ve senet <span class="cnt" id="cekCnt" hidden></span></a></li>
       <li><a href="#kasa-banka">Kasa ve banka</a></li>
@@ -960,18 +961,18 @@ function dbErr(){}
 
 
 /* ---------- yönlendirme ---------- */
-const TITLES={ozet:"Özet",isler:"Yapılacak işler",tahakkuk:"Aylık tahakkuk",["hizli-giris"]:"Hızlı kayıt",cariler:"Cari hesaplar",islemler:"Tahsilat ve ödeme",["cek-senet"]:"Çek ve senet",["kasa-banka"]:"Kasa ve banka",vade:"Vade takvimi",["gelir-gider"]:"Gelir ve gider",raporlar:"Raporlar",ayarlar:"Ayarlar"};
+const TITLES={ozet:"Özet",isler:"Yapılacak işler",tahakkuk:"Aylık tahakkuk",["tahakkuk-gonder"]:"Tahakkuk gönderimi",["hizli-giris"]:"Hızlı kayıt",cariler:"Cari hesaplar",islemler:"Tahsilat ve ödeme",["cek-senet"]:"Çek ve senet",["kasa-banka"]:"Kasa ve banka",vade:"Vade takvimi",["gelir-gider"]:"Gelir ve gider",raporlar:"Raporlar",ayarlar:"Ayarlar"};
 function route(){ return (location.hash||"#ozet").slice(1) || "ozet"; }
 window.addEventListener("hashchange",()=>{ render(); window.scrollTo(0,0); });
 
 function render(){
   if(!S.D) return;
-  $("#navTk").hidden=!modulAcik("tahakkuk");
+  $("#navTk").hidden=!modulAcik("tahakkuk"); $("#navTm").hidden=!modulAcik("tahakkukMail");
   const r=route();
   let base=r; if(r.startsWith("cari-")) base="cariler"; if(r.startsWith("hesap-")) base="kasa-banka";
   if(!TITLES[base]) base="ozet";
   document.querySelectorAll("#navList a").forEach(a=>a.setAttribute("aria-current",a.getAttribute("href")==="#"+base?"page":"false"));
-  const V={ozet:vOzet,isler:vIsler,tahakkuk:vTahakkuk,"hizli-giris":vHizli,cariler:vCariler,islemler:vIslemler,"cek-senet":vCek,"kasa-banka":vKasa,vade:vVade,"gelir-gider":vGelirGider,raporlar:vRapor,ayarlar:vAyar};
+  const V={ozet:vOzet,isler:vIsler,tahakkuk:vTahakkuk,"hizli-giris":vHizli,cariler:vCariler,islemler:vIslemler,"cek-senet":vCek,"kasa-banka":vKasa,vade:vVade,"tahakkuk-gonder":vTahakkukGonder,"gelir-gider":vGelirGider,raporlar:vRapor,ayarlar:vAyar};
   let out;
   if(r.startsWith("cari-")) out=vCariDetay(r.slice(5));
   else if(r.startsWith("hesap-")) out=vHesapDetay(r.slice(6));
@@ -2780,10 +2781,13 @@ const GM={token:"",exp:0,email:"",
   hazir(){ return !!this.token&&Date.now()<this.exp-60000; },
   async yukle(){ if(window.google?.accounts?.oauth2) return;
     await new Promise((ok,no)=>{ const s=document.createElement("script"); s.src="https://accounts.google.com/gsi/client"; s.async=true; s.onload=ok; s.onerror=()=>no(new Error("Google oturum aracı yüklenemedi; internet bağlantısını kontrol edin.")); document.head.appendChild(s); }); },
-  async baglan(){ const id=emClientId(); if(!id) throw new Error("Gmail bağlantısı henüz kurulmadı (Ayarlar › Ekstre e-postası › Google istemci kimliği)."); await this.yukle();
-    return new Promise((ok,no)=>{ const tc=google.accounts.oauth2.initTokenClient({client_id:id,scope:GM_SCOPE+" openid email",hint:this.email||emAyar().hesap||undefined,
+  izinler:new Set(),
+  async baglan(ek=[]){ const id=emClientId(); if(!id) throw new Error("Gmail bağlantısı henüz kurulmadı (Ayarlar › Ekstre e-postası › Google istemci kimliği)."); await this.yukle();
+    return new Promise((ok,no)=>{ const tc=google.accounts.oauth2.initTokenClient({client_id:id,scope:[GM_SCOPE,...ek,"openid","email"].join(" "),hint:this.email||emAyar().hesap||undefined,
       callback:async r=>{ if(r.error) return no(new Error(r.error_description||r.error));
         if(!google.accounts.oauth2.hasGrantedAllScopes(r,GM_SCOPE)) return no(new Error("Gmail ile gönderme izni verilmedi. Google ekranında e-posta gönderme kutusunu işaretleyin."));
+        if(ek.length&&!google.accounts.oauth2.hasGrantedAllScopes(r,...ek)) return no(new Error("Google Drive okuma izni verilmedi. Google ekranında Drive dosyalarını görme kutusunu da işaretleyin."));
+        this.izinler=new Set(String(r.scope||"").split(/\s+/));
         this.token=r.access_token; this.exp=Date.now()+(+r.expires_in||3600)*1000;
         try{ const u=await (await fetch("https://www.googleapis.com/oauth2/v3/userinfo",{headers:{Authorization:"Bearer "+this.token}})).json(); this.email=u.email||""; }catch{}
         ok(); },
@@ -2797,7 +2801,7 @@ const GM={token:"",exp:0,email:"",
     if(!r) throw new Error("Google'a bağlanılamadı ("+(son?.message||"ağ hatası")+"). İnternet bağlantısını, varsa reklam/gizlilik engelleyici eklentileri ya da kurum güvenlik duvarını kontrol edin.");
     if(!r.ok){ let t=""; try{ t=(await r.json()).error?.message||""; }catch{} if(r.status===401) this.token=""; throw new Error(`Gmail ${r.status}${t?": "+t:""}`); } return r.json(); },
   kes(){ try{ if(this.token&&window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(this.token,()=>{}); }catch{} this.token=""; this.exp=0; } };
-async function gmHazirla(){ if(!GM.hazir()) await GM.baglan(); const A=emAyar(); if(GM.email&&A.hesap!==GM.email){ A.hesap=GM.email; emKaydet(A); } }
+async function gmHazirla(ek=[]){ if(!GM.hazir()||ek.some(x=>!GM.izinler.has(x))) await GM.baglan(ek); const A=emAyar(); if(GM.email&&A.hesap!==GM.email){ A.hesap=GM.email; emKaydet(A); } }
 
 /* MIME iletisi: HTML gövde + PDF eki */
 const b64s = t => b64(new TextEncoder().encode(t));
@@ -2806,11 +2810,11 @@ const mimeAd = t => /^[\x20-\x7e]*$/.test(t)?`"${t.replace(/["\\]/g,"")}"`:mimeH
 const mimeSatir = s => s.replace(/.{1,76}/g,"$&\r\n");
 const emAdresler = s => String(s||"").split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
 const emGecerli = s => { const L=emAdresler(s); return L.length>0&&L.every(a=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a)); };
-function emMime({kime,cc,konu,html,dosya,pdf}){ const sn="skypro_"+Math.random().toString(36).slice(2), fm=S.ayar?.firma||{};
+function emMime({kime,cc,konu,html,dosya,pdf,ekler}){ ekler=ekler||[{dosya,veri:pdf,tip:"application/pdf"}]; const sn="skypro_"+Math.random().toString(36).slice(2), fm=S.ayar?.firma||{};
   const bas=[GM.email?`From: ${mimeAd(fm.unvan||GM.email)} <${GM.email}>`:"",`To: ${emAdresler(kime).join(", ")}`,emAdresler(cc).length?`Cc: ${emAdresler(cc).join(", ")}`:"",
     `Subject: ${mimeH(konu)}`,"MIME-Version: 1.0",`Content-Type: multipart/mixed; boundary="${sn}"`].filter(Boolean);
   return [...bas,"",`--${sn}`,"Content-Type: text/html; charset=UTF-8","Content-Transfer-Encoding: base64","",mimeSatir(b64s(html)),
-    `--${sn}`,`Content-Type: application/pdf; name="${mimeH(dosya)}"`,"Content-Transfer-Encoding: base64",`Content-Disposition: attachment; filename="${mimeH(dosya)}"`,"",mimeSatir(b64(pdf)),`--${sn}--`,""].join("\r\n"); }
+    ...ekler.flatMap(e=>[`--${sn}`,`Content-Type: ${e.tip||"application/octet-stream"}; name="${mimeH(e.dosya)}"`,"Content-Transfer-Encoding: base64",`Content-Disposition: attachment; filename="${mimeH(e.dosya)}"`,"",mimeSatir(b64(e.veri))]),`--${sn}--`,""].join("\r\n"); }
 function emGovde(metin,c,son,bas){ const fm=S.ayar?.firma||{};
   return `<div style="font:14px/1.6 Arial,Helvetica,sans-serif;color:#14232b;max-width:640px">${esc(metin).replace(/\n/g,"<br>")}
   <table style="margin-top:18px;border-collapse:collapse;font-size:13px;min-width:320px"><tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Cari</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2"><b>${esc(c.unvan)}</b> (${esc(c.kod)})</td></tr>
@@ -2912,7 +2916,7 @@ async function emOtoKontrol(){
 }
 function emGecmisModal(){ const L=Object.values(S.data?.ekstreMailLog||{}).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,300);
   modal("Ekstre gönderim geçmişi",`<div class="tw" style="max-height:70vh;overflow:auto"><table><thead><tr><th>Tarih</th><th>Cari</th><th>Kime</th><th class="r">Bakiye</th><th>Durum</th><th>Gönderen</th></tr></thead><tbody>
-    ${L.map(x=>`<tr><td class="mono small">${emSaat(x.at)}</td><td class="small">${esc(cariAd(x.cariId))}</td><td class="small">${x.kanal==="whatsapp"?"💬 ":"📧 "}${esc(x.kime)}${x.cc?`<div class="muted">cc: ${esc(x.cc)}</div>`:""}</td><td class="r small">${esc(emBakiyeYazi(x.bakiye,x.doviz||"TRY"))}</td>
+    ${L.map(x=>`<tr><td class="mono small">${emSaat(x.at)}</td><td class="small">${esc(cariAd(x.cariId))}</td><td class="small">${x.kanal==="whatsapp"?"💬 ":x.kanal==="tahakkuk"?"🧾 ":"📧 "}${esc(x.kime)}${x.kanal==="tahakkuk"?`<div class="muted">${esc(ayTam(x.donem))} tahakkukları: ${esc((x.dosyalar||[]).join(", "))}</div>`:""}${x.cc?`<div class="muted">cc: ${esc(x.cc)}</div>`:""}</td><td class="r small">${x.kanal==="tahakkuk"?"":esc(emBakiyeYazi(x.bakiye,x.doviz||"TRY"))}</td>
       <td class="small">${x.kanal==="whatsapp"?`<span class="muted">WhatsApp ${x.yol==="paylaş"?"ile paylaşıldı":"açıldı"}</span>`:x.durum==="ok"?`<span style="color:var(--alacak)">✓ gönderildi</span>`:`<span style="color:var(--borc)">Hata</span><div class="muted">${esc(x.hata||"")}</div>`}${x.oto?` <span class="pill">otomatik</span>`:""}</td><td class="small muted">${esc(x.hesap||"")}${x.by?`<div>${esc(kullaniciAd(x.by))}</div>`:""}</td></tr>`).join("")||`<tr><td colspan="6" class="empty">Henüz gönderim yok.</td></tr>`}</tbody></table></div>`,
     `<span></span><button class="btn" data-act="close">Kapat</button>`);
   const sh=$("#overlay .sheet"); if(sh){ sh.style.maxWidth="min(1000px,96vw)"; sh.style.width="100%"; } }
@@ -3001,6 +3005,154 @@ function waTopluModal(){ const A=emAyar(), st={kapsam:A.oto.kapsam||"bakiyeli",a
       try{ await waPaylas(id,bas,w.metin); waLog(id,waNo(c.tel),w.son,c,"paylaş"); st.acilan.add(id); changed(); ciz(); }catch(err){ if(err?.name!=="AbortError") toast("Paylaşılamadı: "+(err.message||err)); } }));
   };
   ciz(); }
+/* ---------- tahakkuk gönderimi: Drive'daki beyanname tahakkukları ve SGK hizmet listeleri müşteriye e-postayla (yalnızca SKY) ---------- */
+const DRIVE_SCOPE="https://www.googleapis.com/auth/drive.readonly", FOLDER="application/vnd.google-apps.folder", DRV="https://www.googleapis.com/drive/v3/files";
+const TM_VARS={konu:"{firma} – {donem} dönemi tahakkuklarınız",
+  metin:"Sayın {hitap},\n\n{donem} dönemine ait tahakkuklarınız ektedir:\n{liste}\n\nÖdemelerinizi son ödeme tarihine kadar yapmanızı rica ederiz.\n\nSaygılarımızla,\n{firma}",
+  kok:"{yil} Şirketler",cc:"",klasor:{}};
+const tmAyar = () => { const e=S.data?.ayar?.tahakkukMail||{}; return {...clone(TM_VARS),...clone(e),klasor:{...(e.klasor||{})}}; };
+function tmKaydet(a){ S.data.ayar={...(S.data.ayar||{}),tahakkukMail:a}; changed(); }
+const TM={kok:{},alt:{},sonuc:{},calisiyor:false}; // oturum önbelleği (Drive aramaları)
+const trLow = s => String(s||"").toLocaleLowerCase("tr");
+const qs = s => String(s).replace(/\\/g,"\\\\").replace(/'/g,"\\'");
+async function drv(q,fields="files(id,name,mimeType,modifiedTime,createdTime,size)"){ const out=[]; let tok="";
+  do{ const u=`${DRV}?q=${encodeURIComponent(q)}&fields=${encodeURIComponent("nextPageToken,"+fields)}&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true${tok?"&pageToken="+encodeURIComponent(tok):""}`;
+    let r; try{ r=await fetch(u,{headers:{Authorization:"Bearer "+GM.token}}); }catch(e){ throw new Error("Google Drive'a bağlanılamadı ("+e.message+")"); }
+    if(!r.ok){ let t=""; try{ t=(await r.json()).error?.message||""; }catch{} if(r.status===401) GM.token=""; throw new Error(`Drive ${r.status}${t?": "+t:""}`); }
+    const j=await r.json(); out.push(...(j.files||[])); tok=j.nextPageToken||""; } while(tok);
+  return out; }
+async function drvIndir(id){ const r=await fetch(`${DRV}/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`,{headers:{Authorization:"Bearer "+GM.token}});
+  if(!r.ok) throw new Error(`Drive dosyası indirilemedi (${r.status})`); return new Uint8Array(await r.arrayBuffer()); }
+const tmNorm = s => String(s||"").toLocaleUpperCase("tr").replace(/[^A-Z0-9ÇĞİÖŞÜ]+/g," ").trim();
+async function tmKok(yil){ const ad=tmAyar().kok.replace("{yil}",yil); if(TM.kok[ad]) return TM.kok[ad];
+  const L=await drv(`name='${qs(ad)}' and mimeType='${FOLDER}' and trashed=false`,"files(id,name)");
+  if(!L.length) throw new Error(`Drive'da "${ad}" klasörü bulunamadı`); return TM.kok[ad]=L[0]; }
+async function tmMusteriKlasorleri(yil){ const k=await tmKok(yil); if(TM.alt[k.id]) return TM.alt[k.id];
+  return TM.alt[k.id]=(await drv(`'${k.id}' in parents and mimeType='${FOLDER}' and trashed=false`,"files(id,name)")).sort((a,b)=>a.name.localeCompare(b.name,"tr")); }
+// cari ↔ klasör: önce elle seçilen, sonra klasör adındaki VKN/TCKN, sonra ünvan
+function tmEsle(c,K,yil){ const el=tmAyar().klasor[`${yil}|${c.id}`]; if(el) return {...el,el:true};
+  const v=String(c.vkn||"").replace(/\D/g,"");
+  if(v.length>=10){ const k=K.find(f=>(f.name.match(/\d{10,11}/g)||[]).includes(v)); if(k) return k; }
+  const u=tmNorm(c.unvan); if(!u) return null;
+  return K.find(f=>tmNorm(f.name.replace(/\d{10,11}/g,""))===u)||K.find(f=>tmNorm(f.name).startsWith(u+" "))||null; }
+// dosya adından dönem: "09-2026", "07.09-2026" (3 aylık), "3. DÖNEM" (çeyrek; yıl addan ya da kök klasörden)
+function tmDonem(ad,yil){ const u=String(ad).toLocaleUpperCase("tr"); let m;
+  if((m=u.match(/(?:^|\D)(\d{2})\.(\d{2})-(\d{4})(?!\d)/))) return {bas:`${m[3]}-${m[1]}`,bit:`${m[3]}-${m[2]}`};
+  if((m=u.match(/(?:^|\D)(\d{2})-(\d{4})(?!\d)/))&&+m[1]>=1&&+m[1]<=12) return {bas:`${m[2]}-${m[1]}`,bit:`${m[2]}-${m[1]}`};
+  if((m=u.match(/(?:^|\D)([1-4])\s*\.?\s*D+ÖNEM/))){ const y=(u.match(/(?:^|\D)(20\d{2})(?!\d)/)||[])[1]||yil, b=+m[1]*3; return {bas:`${y}-${pad(b-2)}`,bit:`${y}-${pad(b)}`}; }
+  return null; }
+const tmTur = f => { const u=f.name.toLocaleUpperCase("tr"), y=(f.yol||"").toLocaleUpperCase("tr");
+  if(/HİZMET\s*L[İI]STE/.test(u)&&/SGK/.test(y+" "+u)) return "hizmet"; if(/TAHAKKUK/.test(u)) return "tahakkuk"; return null; };
+async function tmTara(klasorId){ // müşteri klasöründe yalnızca BEYANNAMELER ve SGK alt ağaçları (3 kat)
+  const out=[], kuyruk=[{id:klasorId,yol:"",d:0}];
+  while(kuyruk.length){ const x=kuyruk.shift(), L=await drv(`'${x.id}' in parents and trashed=false`);
+    for(const f of L){ const yol=x.yol?x.yol+" / "+f.name:f.name;
+      if(f.mimeType===FOLDER){ const n=tmNorm(f.name); if(x.d===0&&!/^(BEYANNAMELER|SGK)$/.test(n)) continue; if(/ÇALIŞMA|TASLAK|ESKİ/.test(n)) continue; if(x.d<3) kuyruk.push({id:f.id,yol,d:x.d+1}); }
+      else if(/\.pdf$/i.test(f.name)||f.mimeType==="application/pdf") out.push({...f,yol:x.yol}); } }
+  return out; }
+async function tmCariTara(c,ay){ const yil=ay.slice(0,4), K=await tmMusteriKlasorleri(yil), k=tmEsle(c,K,yil);
+  if(!k) return {klasor:null,dosyalar:[]};
+  const L=await tmTara(k.id), sonrakiBas=ayKaydir(ay,1)+"-01", sonrakiBit=aySonu(ayKaydir(ay,2)), d=[];
+  for(const f of L){ const tur=tmTur(f); if(!tur) continue; const dn=tmDonem(f.name,yil);
+    if(dn&&dn.bit===ay) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:true,boyut:+f.size||0});
+    else if(!dn){ const t=(f.createdTime||f.modifiedTime||"").slice(0,10); if(t>=sonrakiBas&&t<=sonrakiBit) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:false,belirsiz:true,boyut:+f.size||0}); } }
+  d.sort((a,b)=>(a.tur==="hizmet")-(b.tur==="hizmet")||a.ad.localeCompare(b.ad,"tr"));
+  return {klasor:k,dosyalar:d}; }
+const tmSon = (cid,ay) => Object.values(S.data?.ekstreMailLog||{}).filter(x=>x.kanal==="tahakkuk"&&x.cariId===cid&&x.donem===ay&&x.durum==="ok").sort((a,b)=>b.at.localeCompare(a.at))[0];
+const tmListe = d => d.map(x=>"• "+x.ad.replace(/\.pdf$/i,"")).join("\n");
+function tmGovde(metin){ const fm=S.ayar?.firma||{};
+  return `<div style="font:14px/1.6 Arial,Helvetica,sans-serif;color:#14232b;max-width:640px">${esc(metin).replace(/\n/g,"<br>")}
+  <p style="color:#8a9aa2;font-size:11px;margin-top:20px">${esc(fm.unvan||"")}${fm.tel?" · "+esc(fm.tel):""}${fm.eposta?" · "+esc(fm.eposta):""}<br>Bu e-posta SKYPRO ön muhasebe programından gönderilmiştir.</p></div>`; }
+async function tmGonderBir(c,ay,r){ const A=tmAyar(), sec=r.dosyalar.filter(x=>x.sec);
+  if(!sec.length) throw new Error("Seçili dosya yok"); if(!emGecerli(c.eposta)) throw new Error("E-posta adresi yok ya da hatalı");
+  const ekler=[]; for(const x of sec) ekler.push({dosya:x.ad,veri:await drvIndir(x.id),tip:"application/pdf"});
+  const v={hitap:c.yetkili||c.unvan,unvan:c.unvan,firma:S.ayar?.firma?.unvan||"",donem:ayTam(ay),liste:tmListe(sec)};
+  const m={kime:c.eposta,cc:A.cc,konu:emDoldur(A.konu,v),html:tmGovde(emDoldur(A.metin,v)),ekler};
+  try{ await GM.gonder(emMime(m)); emLog({kanal:"tahakkuk",cariId:c.id,kime:c.eposta,cc:A.cc||"",donem:ay,dosyalar:sec.map(x=>x.ad),durum:"ok"}); }
+  catch(err){ emLog({kanal:"tahakkuk",cariId:c.id,kime:c.eposta,cc:A.cc||"",donem:ay,dosyalar:sec.map(x=>x.ad),durum:"hata",hata:String(err.message||err)}); throw err; } }
+
+function vTahakkukGonder(){
+  if(!modulAcik("tahakkukMail")) return {title:"Tahakkuk gönderimi",btns:" ",html:`<div class="notice">Bu modül bu firmada kapalı.</div>`};
+  const f=S.view.tm||(S.view.tm={ay:ayKaydir(TODAY.slice(0,7),-1),q:"",sec:{},acik:{},sadeceEposta:true});
+  const S0=TM.sonuc[f.ay]||(TM.sonuc[f.ay]={}), A=tmAyar();
+  const M=sortedCariler().filter(c=>["musteri","ikisi"].includes(c.tip)&&(!f.q||trLow(c.unvan+" "+c.kod+" "+(c.vkn||"")).includes(trLow(f.q)))&&(!f.sadeceEposta||emGecerli(c.eposta)));
+  const taranan=M.filter(c=>S0[c.id]), dosyaliSec=M.filter(c=>f.sec[c.id]&&S0[c.id]?.dosyalar?.some(x=>x.sec)&&emGecerli(c.eposta));
+  const satir=c=>{ const r=S0[c.id], son=tmSon(c.id,f.ay), n=r?.dosyalar?.filter(x=>x.sec).length||0, ac=f.acik[c.id];
+    const dsy=!r?`<span class="muted">—</span>`:r.hata?`<span style="color:var(--borc)">${esc(r.hata)}</span>`:r.calisiyor?`<span class="muted">aranıyor…</span>`:!r.klasor?`<span style="color:var(--borc)">Klasör bulunamadı</span>`:
+      `<button class="btn sm" data-tmac="${c.id}" aria-expanded="${!!ac}">${r.dosyalar.length?`${n} / ${r.dosyalar.length} dosya`:"Dosya yok"} ${ac?"▴":"▾"}</button>`;
+    return `<tr${f.sec[c.id]?` style="background:#eef5fb"`:""}><td><input type="checkbox" data-tmsec="${c.id}" ${f.sec[c.id]?"checked":""} aria-label="${esc(c.unvan)}"></td>
+      <td class="small">${esc(c.kod)} · <b>${esc(c.unvan)}</b>${c.vkn?`<div class="muted mono">${esc(c.vkn)}</div>`:""}</td>
+      <td class="small">${r?.klasor?`${esc(r.klasor.name)}${r.klasor.el?` <span class="pill">elle</span>`:""}`:`<span class="muted">${r?"—":"aranmadı"}</span>`} <button class="btn sm" data-tmkls="${c.id}" title="Drive klasörünü elle seç">Seç</button></td>
+      <td class="small">${emGecerli(c.eposta)?esc(c.eposta):`<span style="color:var(--borc)">e-posta yok</span>`}</td>
+      <td class="small">${dsy}</td>
+      <td class="small" data-tmd="${c.id}">${son?`<span style="color:var(--alacak)">✓ ${emSaat(son.at)}</span>`:r?.gonderim||""}</td></tr>
+      ${ac&&r?.dosyalar?`<tr><td></td><td colspan="5" style="background:var(--surface-2)">${r.dosyalar.length?r.dosyalar.map((x,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" data-tmdos="${c.id}" data-i="${i}" ${x.sec?"checked":""}>
+        <span>${x.tur==="hizmet"?"📋":"🧾"} ${esc(x.ad)} <span class="muted">· ${esc(x.yol)}${x.belirsiz?" · dönemi addan anlaşılamadı, tarihine göre listelendi":""}</span></span> <a href="https://drive.google.com/file/d/${x.id}/view" target="_blank" rel="noopener" class="small">aç</a></label>`).join(""):`<span class="muted small">Bu dönem için "TAHAKKUK" ya da "HİZMET LİSTESİ" adlı dosya bulunamadı.</span>`}</td></tr>`:""}`; };
+  const html=`<section class="panel"><div class="pad" style="display:flex;flex-direction:column;gap:12px">
+    <div class="filters" style="align-items:end">
+      <label>Dönem<input type="month" id="tm_ay" value="${f.ay}"></label>
+      <label>Ara<input type="search" id="tm_q" value="${esc(f.q)}" placeholder="Müşteri, kod, VKN"></label>
+      <label style="flex-direction:row;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="tm_ep" ${f.sadeceEposta?"checked":""}> Yalnızca e-postası olanlar</label>
+    </div>
+    <div class="small muted">Drive'da <b>${esc(A.kok.replace("{yil}",f.ay.slice(0,4)))}</b> › müşteri klasörü › <b>BEYANNAMELER</b> ve <b>SGK</b> altındaki, adında <b>TAHAKKUK</b> ya da <b>HİZMET LİSTESİ</b> geçen ve dönemi <b>${ayTam(f.ay)}</b> olan PDF'ler bulunur (örn. <span class="mono">${f.ay.slice(5)}-${f.ay.slice(0,4)} KDV TAHAKKUK.pdf</span>; 3 aylık dosyalar çeyreğin son ayında gelir).</div>
+    <div class="btns" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn" id="tmAra" ${TM.calisiyor?"disabled":""}>🔎 ${Object.keys(f.sec).length?"Seçilenleri":"Listedekileri"} Drive'da ara</button>
+      <button class="btn pri" id="tmGo" data-w ${TM.calisiyor||!dosyaliSec.length?"disabled":""}>📧 ${dosyaliSec.length} müşteriye gönder</button>
+      <span class="small muted" id="tmIl" style="align-self:center">${taranan.length?`${taranan.length} müşteri arandı`:""}</span></div>
+  </div>
+  <div class="tw"><table><thead><tr><th style="width:30px"><input type="checkbox" id="tmHep" ${M.length&&M.every(c=>f.sec[c.id])?"checked":""} aria-label="Tümünü seç"></th><th>Müşteri</th><th>Drive klasörü</th><th>E-posta</th><th>Bu dönemin dosyaları</th><th>Gönderim</th></tr></thead>
+  <tbody>${M.map(satir).join("")||`<tr><td colspan="6" class="empty">Müşteri yok.</td></tr>`}</tbody></table></div></section>
+  <section class="panel"><details ${f.sablon?"open":""} id="tmSab"><summary style="padding:14px 18px;cursor:pointer"><b>Mail şablonu ve klasör ayarı</b></summary>
+    <form class="form" id="tmAyF">
+      <div class="f w"><label for="tm_k">Konu</label><input id="tm_k" name="konu" value="${esc(A.konu)}"></div>
+      <div class="f w"><label for="tm_m">Metin</label><textarea id="tm_m" name="metin" rows="8">${esc(A.metin)}</textarea><span class="hint">Alanlar: {hitap} · {unvan} · {donem} (örn. Eylül 2026) · {liste} (ekteki dosyaların adları) · {firma}</span></div>
+      <div class="f"><label for="tm_cc">Her maile bilgi (CC)</label><input id="tm_cc" name="cc" value="${esc(A.cc)}" placeholder="İsteğe bağlı"></div>
+      <div class="f"><label for="tm_kok">Drive'daki yıl klasörü</label><input id="tm_kok" name="kok" value="${esc(A.kok)}"><span class="hint">{yil} dönem yılıyla değişir: ${esc(A.kok.replace("{yil}",f.ay.slice(0,4)))}</span></div>
+      <div class="f w" data-w><button class="btn pri" type="submit">Kaydet</button></div></form></details></section>`;
+  return {title:`Tahakkuk gönderimi<span class="sub">${ayTam(f.ay)} dönemi · Drive › e-posta</span>`,btns:`<button class="btn" data-act="emGecmis">Gönderim geçmişi</button>`,html,after(){
+    GM.yukle().catch(()=>{});
+    const yenile=()=>{ const y=window.scrollY; render(); window.scrollTo(0,y); };
+    $("#tm_ay").addEventListener("change",e=>{ if(e.target.value){ f.ay=e.target.value; f.acik={}; yenile(); } });
+    $("#tm_q").addEventListener("input",e=>{ f.q=e.target.value; clearTimeout(f._t); f._t=setTimeout(()=>{ yenile(); const q=$("#tm_q"); q?.focus(); q?.setSelectionRange(q.value.length,q.value.length); },250); });
+    $("#tm_ep").addEventListener("change",e=>{ f.sadeceEposta=e.target.checked; yenile(); });
+    $("#tmHep")?.addEventListener("change",e=>{ for(const c of M) e.target.checked?f.sec[c.id]=1:delete f.sec[c.id]; yenile(); });
+    document.querySelectorAll("[data-tmsec]").forEach(k=>k.addEventListener("change",()=>{ k.checked?f.sec[k.dataset.tmsec]=1:delete f.sec[k.dataset.tmsec]; yenile(); }));
+    document.querySelectorAll("[data-tmac]").forEach(b=>b.addEventListener("click",()=>{ const id=b.dataset.tmac; f.acik[id]=!f.acik[id]; yenile(); }));
+    document.querySelectorAll("[data-tmdos]").forEach(k=>k.addEventListener("change",()=>{ S0[k.dataset.tmdos].dosyalar[+k.dataset.i].sec=k.checked; yenile(); }));
+    document.querySelectorAll("[data-tmkls]").forEach(b=>b.addEventListener("click",()=>tmKlasorSec(b.dataset.tmkls,f.ay)));
+    $("#tmSab").addEventListener("toggle",e=>f.sablon=e.target.open);
+    $("#tmAyF").addEventListener("submit",e=>{ e.preventDefault(); const fd=new FormData(e.target), a=tmAyar();
+      a.konu=String(fd.get("konu")||"").trim()||TM_VARS.konu; a.metin=String(fd.get("metin")||"")||TM_VARS.metin; a.cc=String(fd.get("cc")||"").trim(); a.kok=String(fd.get("kok")||"").trim()||TM_VARS.kok;
+      if(a.cc&&!emGecerli(a.cc)) return toast("Bilgi (CC) adresi hatalı."); if(a.kok!==A.kok){ TM.kok={}; TM.alt={}; } tmKaydet(a); toast("Tahakkuk mail ayarları kaydedildi"); });
+    $("#tmAra").addEventListener("click",async()=>{ const L=Object.keys(f.sec).length?M.filter(c=>f.sec[c.id]):M; if(!L.length) return;
+      try{ await gmHazirla([DRIVE_SCOPE]); }catch(err){ return toast(err.message||String(err)); }
+      TM.calisiyor=true; let i=0;
+      for(const c of L){ S0[c.id]={calisiyor:true}; $("#tmIl")&&($("#tmIl").textContent=`${++i} / ${L.length} · ${c.unvan}`);
+        try{ S0[c.id]=await tmCariTara(c,f.ay); if(S0[c.id].dosyalar.some(x=>x.sec)&&!tmSon(c.id,f.ay)&&emGecerli(c.eposta)) f.sec[c.id]=1; }
+        catch(err){ S0[c.id]={hata:err.message||String(err),dosyalar:[]}; if(/Drive 40[13]|bulunamadı/.test(err.message)) { for(const c2 of L) if(!S0[c2.id]||S0[c2.id].calisiyor) S0[c2.id]={hata:err.message,dosyalar:[]}; break; } }
+        if(i%5===0||i===L.length) yenile(); }
+      TM.calisiyor=false; yenile(); const top=L.reduce((s,c)=>s+(S0[c.id]?.dosyalar?.length||0),0); toast(`${L.length} müşteri arandı · ${top} dosya bulundu`); });
+    $("#tmGo").addEventListener("click",async()=>{ const L=dosyaliSec; if(!L.length) return;
+      const tekrar=L.filter(c=>tmSon(c.id,f.ay)); if(tekrar.length&&!confirm(`${tekrar.length} müşteriye bu dönemin tahakkukları daha önce gönderilmiş. Yine de gönderilsin mi?`)) return;
+      try{ await gmHazirla([DRIVE_SCOPE]); }catch(err){ return toast(err.message||String(err)); }
+      TM.calisiyor=true; yenile(); let ok=0; const hata=[];
+      for(const [i,c] of L.entries()){ const el=document.querySelector(`[data-tmd="${c.id}"]`); if(el) el.textContent="gönderiliyor…"; $("#tmIl")&&($("#tmIl").textContent=`${i+1} / ${L.length} · ${c.unvan}`);
+        try{ await tmGonderBir(c,f.ay,S0[c.id]); ok++; delete f.sec[c.id]; S0[c.id].gonderim=""; }
+        catch(err){ hata.push(`${c.unvan}: ${err.message||err}`); S0[c.id].gonderim=`<span style="color:var(--borc)">Hata: ${esc(err.message||String(err))}</span>`; if(/^Gmail 40[13]/.test(err.message||"")&&!GM.hazir()) break; } }
+      TM.calisiyor=false; changed(); toast(`${ok} müşteriye tahakkuk gönderildi${hata.length?` · ${hata.length} hata`:""}`); });
+  }};
+}
+async function tmKlasorSec(cid,ay){ const c=S.cariler.get(cid), yil=ay.slice(0,4);
+  try{ await gmHazirla([DRIVE_SCOPE]); }catch(err){ return toast(err.message||String(err)); }
+  let K; try{ K=await tmMusteriKlasorleri(yil); }catch(err){ return toast(err.message||String(err)); }
+  const ciz=q=>{ const L=K.filter(k=>!q||trLow(k.name).includes(trLow(q))).slice(0,300);
+    $("#tmKL").innerHTML=L.map(k=>`<button type="button" class="btn sm" data-k="${k.id}" style="justify-content:flex-start;text-align:left">${esc(k.name)}</button>`).join("")||`<span class="muted small">Eşleşen klasör yok.</span>`;
+    $("#tmKL").querySelectorAll("[data-k]").forEach(b=>b.addEventListener("click",()=>{ const k=K.find(x=>x.id===b.dataset.k), a=tmAyar(); a.klasor[`${yil}|${cid}`]={id:k.id,name:k.name}; tmKaydet(a);
+      delete TM.sonuc[ay]?.[cid]; closeModal(); toast(`${c.unvan} → ${k.name}`); render(); })); };
+  modal(`Drive klasörü · ${c.unvan}`,`<div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px"><input type="search" id="tmKQ" placeholder="Klasör ara" value="${esc(c.unvan.split(" ")[0])}">
+    <div id="tmKL" style="display:flex;flex-direction:column;gap:4px;max-height:55vh;overflow:auto"></div></div>`,
+    `${tmAyar().klasor[`${yil}|${cid}`]?`<button class="btn" id="tmKSil">Otomatik eşleştirmeye dön</button>`:"<span></span>"}<button class="btn" data-act="close">Kapat</button>`);
+  $("#tmKQ").addEventListener("input",e=>ciz(e.target.value)); ciz($("#tmKQ").value);
+  $("#tmKSil")?.addEventListener("click",()=>{ const a=tmAyar(); delete a.klasor[`${yil}|${cid}`]; tmKaydet(a); delete TM.sonuc[ay]?.[cid]; closeModal(); render(); }); }
 Object.assign(ACT,{
   waTek:el=>waTekModal(el.dataset.id),
   waTopluAc:()=>waTopluModal(),
@@ -3358,7 +3510,7 @@ function tkAySeciciBagla(on,ay,degis){ $("#"+on+"_onc").addEventListener("click"
 const sonrakiAySonu = d => iso(new Date(+d.slice(0,4),+d.slice(5,7)+1,0));
 // SKY Mali Müşavirlik'te e-posta modülü ayarlanmamışsa açık gelir; diğer firmalarda kapalı
 const skyFirma = () => { const u=(S.ayar?.firma?.unvan||"").toLocaleUpperCase("tr"); return /\bSKY\b/.test(u)&&/MÜŞAV|MUSAV/.test(u); };
-const MODUL_VARS={ekstreMail:()=>skyFirma()};
+const MODUL_VARS={ekstreMail:()=>skyFirma(),tahakkukMail:()=>skyFirma()};
 const modulAcik = ad => { const v=S.ayar?.moduller?.[ad]; return v===undefined?!!MODUL_VARS[ad]?.():!!v; };
 const TK_TIP={gelir:{fat:"satis",dek:"alacak_dekont",ad:"Gelir",cari:"Müşteri",tipler:["musteri","ikisi"],ctip:"musteri"},gider:{fat:"alis",dek:"borc_dekont",ad:"Gider",cari:"Tedarikçi",tipler:["tedarikci","ikisi"],ctip:"tedarikci"}};
 const tkTipOf = h => (h.tur==="alis"||h.tur==="borc_dekont")?"gider":"gelir";
@@ -3715,6 +3867,8 @@ function modulPanel(){
     <span><b>Aylık tahakkuk</b><br><span class="small muted">Müşterilerinizden her ay alacağınız ücretleri ve her ay ödediğiniz kira, abonelik gibi giderleri bir tabloda tutar; ay sonunda hepsini ya da seçtiklerinizi carilere işler. Mali müşavirlik bürosunun kendi firması için.</span></span></label>
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="ekstreMail" ${modulAcik("ekstreMail")?"checked":""} style="margin-top:3px">
     <span><b>Ekstre e-postası (Gmail)</b><br><span class="small muted">Müşterilere PDF ekli cari ekstresini firmanın Gmail adresinden tek tek, toplu ya da her ay otomatik gönderir. Firmanın Gmail adresinin Google tarafında izinli listeye eklenmiş olması gerekir.</span></span></label>
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="tahakkukMail" ${modulAcik("tahakkukMail")?"checked":""} style="margin-top:3px">
+    <span><b>Tahakkuk gönderimi (Drive › e-posta)</b><br><span class="small muted">Mükelleflerin Google Drive klasöründeki beyanname tahakkuklarını ve SGK hizmet listelerini seçilen dönem için bulur, müşteriye e-postayla gönderir. Mali müşavirlik bürosu için.</span></span></label>
   </div></section>`;
 }
 
@@ -4016,7 +4170,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.10.1-önizleme";
+const SURUM="1.11.0-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
