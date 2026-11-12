@@ -3041,8 +3041,10 @@ function tmDonem(ad,yil){ const u=String(ad).toLocaleUpperCase("tr"); let m;
   if((m=u.match(/(?:^|\D)(\d{2})-(\d{4})(?!\d)/))&&+m[1]>=1&&+m[1]<=12) return {bas:`${m[2]}-${m[1]}`,bit:`${m[2]}-${m[1]}`};
   if((m=u.match(/(?:^|\D)([1-4])\s*\.?\s*D+ÖNEM/))){ const y=(u.match(/(?:^|\D)(20\d{2})(?!\d)/)||[])[1]||yil, b=+m[1]*3; return {bas:`${y}-${pad(b-2)}`,bit:`${y}-${pad(b)}`}; }
   return null; }
-const tmTur = f => { const u=f.name.toLocaleUpperCase("tr"), y=(f.yol||"").toLocaleUpperCase("tr");
-  if(/HİZMET\s*L[İI]STE/.test(u)&&/SGK/.test(y+" "+u)) return "hizmet"; if(/TAHAKKUK/.test(u)) return "tahakkuk"; return null; };
+// tahakkuk: adında TAHAKKUK ya da THK (ör. "09-2026 KDV THK.pdf", "...KDVTHK.pdf") geçen PDF
+const tmTur = f => { const u=f.name.toLocaleUpperCase("tr").replace(/\.PDF$/,"").trim(), y=(f.yol||"").toLocaleUpperCase("tr");
+  if(/HİZMET\s*L[İI]STE/.test(u)&&/SGK/.test(y+" "+u)) return "hizmet";
+  if(/TAHAKKUK/.test(u)||/(^|[^A-ZÇĞİÖŞÜ])THK($|[^A-ZÇĞİÖŞÜ])/.test(u)||/THK$/.test(u)) return "tahakkuk"; return null; };
 async function tmTara(klasorId){ // müşteri klasöründe yalnızca BEYANNAMELER ve SGK alt ağaçları (3 kat)
   const out=[], kuyruk=[{id:klasorId,yol:"",d:0}];
   while(kuyruk.length){ const x=kuyruk.shift(), L=await drv(`'${x.id}' in parents and trashed=false`);
@@ -3087,14 +3089,14 @@ function vTahakkukGonder(){
       <td class="small">${dsy}</td>
       <td class="small" data-tmd="${c.id}">${son?`<span style="color:var(--alacak)">✓ ${emSaat(son.at)}</span>`:r?.gonderim||""}</td></tr>
       ${ac&&r?.dosyalar?`<tr><td></td><td colspan="5" style="background:var(--surface-2)">${r.dosyalar.length?r.dosyalar.map((x,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" data-tmdos="${c.id}" data-i="${i}" ${x.sec?"checked":""}>
-        <span>${x.tur==="hizmet"?"📋":"🧾"} ${esc(x.ad)} <span class="muted">· ${esc(x.yol)}${x.belirsiz?" · dönemi addan anlaşılamadı, tarihine göre listelendi":""}</span></span> <a href="https://drive.google.com/file/d/${x.id}/view" target="_blank" rel="noopener" class="small">aç</a></label>`).join(""):`<span class="muted small">Bu dönem için "TAHAKKUK" ya da "HİZMET LİSTESİ" adlı dosya bulunamadı.</span>`}</td></tr>`:""}`; };
+        <span>${x.tur==="hizmet"?"📋":"🧾"} ${esc(x.ad)} <span class="muted">· ${esc(x.yol)}${x.belirsiz?" · dönemi addan anlaşılamadı, tarihine göre listelendi":""}</span></span> <a href="https://drive.google.com/file/d/${x.id}/view" target="_blank" rel="noopener" class="small">aç</a></label>`).join(""):`<span class="muted small">Bu dönem için adında "TAHAKKUK", "THK" ya da "HİZMET LİSTESİ" geçen dosya bulunamadı.</span>`}</td></tr>`:""}`; };
   const html=`<section class="panel"><div class="pad" style="display:flex;flex-direction:column;gap:12px">
     <div class="filters" style="align-items:end">
       <label>Dönem<input type="month" id="tm_ay" value="${f.ay}"></label>
       <label>Ara<input type="search" id="tm_q" value="${esc(f.q)}" placeholder="Müşteri, kod, VKN"></label>
       <label style="flex-direction:row;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="tm_ep" ${f.sadeceEposta?"checked":""}> Yalnızca e-postası olanlar</label>
     </div>
-    <div class="small muted">Drive'da <b>${esc(A.kok.replace("{yil}",f.ay.slice(0,4)))}</b> › müşteri klasörü › <b>BEYANNAMELER</b> ve <b>SGK</b> altındaki, adında <b>TAHAKKUK</b> ya da <b>HİZMET LİSTESİ</b> geçen ve dönemi <b>${ayTam(f.ay)}</b> olan PDF'ler bulunur (örn. <span class="mono">${f.ay.slice(5)}-${f.ay.slice(0,4)} KDV TAHAKKUK.pdf</span>; 3 aylık dosyalar çeyreğin son ayında gelir).</div>
+    <div class="small muted">Drive'da <b>${esc(A.kok.replace("{yil}",f.ay.slice(0,4)))}</b> › müşteri klasörü › <b>BEYANNAMELER</b> ve <b>SGK</b> altındaki, adında <b>TAHAKKUK</b>, <b>THK</b> ya da <b>HİZMET LİSTESİ</b> geçen ve dönemi <b>${ayTam(f.ay)}</b> olan PDF'ler bulunur (örn. <span class="mono">${f.ay.slice(5)}-${f.ay.slice(0,4)} KDV TAHAKKUK.pdf</span>; 3 aylık dosyalar çeyreğin son ayında gelir).</div>
     <div class="btns" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn" id="tmAra" ${TM.calisiyor?"disabled":""}>🔎 ${Object.keys(f.sec).length?"Seçilenleri":"Listedekileri"} Drive'da ara</button>
       <button class="btn pri" id="tmGo" data-w ${TM.calisiyor||!dosyaliSec.length?"disabled":""}>📧 ${dosyaliSec.length} müşteriye gönder</button>
       <span class="small muted" id="tmIl" style="align-self:center">${taranan.length?`${taranan.length} müşteri arandı`:""}</span></div>
@@ -4170,7 +4172,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.11.0-önizleme";
+const SURUM="1.11.1-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
