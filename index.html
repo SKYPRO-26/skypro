@@ -1172,8 +1172,49 @@ function vCariDetay(id){
 }
 
 /* ---------- İŞLEMLER ---------- */
+/* aylık tahsilat-ödeme raporu (Tahsilat ve ödeme sayfasında ay seçilince) */
+const THAY_KANAL = h => h.tur==="tahsilat"?(KANAL_T[h.kanal]||"Diğer"):(KANAL_O[h.kanal]||"Diğer");
+function thAyRapor(ay){
+  const bas=ay+"-01", bit=aySonu(ay), L=S.hareketler.filter(h=>["tahsilat","odeme"].includes(h.tur)&&h.tarih>=bas&&h.tarih<=bit);
+  const R={ay,bas,bit,L,t:0,o:0,tn:0,on:0,gun:{},kanal:{},cari:{},hesap:{}};
+  for(const h of L){ const v=tl(h), t=h.tur==="tahsilat", g=+h.tarih.slice(8);
+    if(t){ R.t+=v; R.tn++; } else { R.o+=v; R.on++; }
+    const G=R.gun[g]||(R.gun[g]={t:0,o:0}); t?G.t+=v:G.o+=v;
+    const k=THAY_KANAL(h), K=R.kanal[k]||(R.kanal[k]={t:0,o:0,n:0}); t?K.t+=v:K.o+=v; K.n++;
+    if(h.cariId){ const C=R.cari[h.cariId]||(R.cari[h.cariId]={t:0,o:0,n:0}); t?C.t+=v:C.o+=v; C.n++; }
+    const hs=h.hesapId?hesapAd(h.hesapId):(h.cekId?"Çek/senet portföyü":"—"), Hs=R.hesap[hs]||(R.hesap[hs]={t:0,o:0}); t?Hs.t+=v:Hs.o+=v; }
+  return R; }
+const thYuzde = (a,b,ters) => !b?"":`<span class="small" style="color:${(a>=b)!==!!ters?"var(--alacak)":"var(--borc)"}">${a>=b?"▲":"▼"} %${Math.abs((a-b)/b*100).toLocaleString("tr-TR",{maximumFractionDigits:0})}</span> <span class="small muted">önceki aya göre</span>`;
+function thAyHTML(R){ const O=thAyRapor(ayKaydir(R.ay,-1)), net=R.t-R.o;
+  const tablo=(baslik,K,ilk,tik)=>{ const E=Object.entries(K).sort((a,b)=>(b[1].t+b[1].o)-(a[1].t+a[1].o));
+    return `<section class="panel"><header><h2>${baslik}</h2></header>${E.length?`<div class="tw"><table><thead><tr><th>${ilk}</th><th class="r">Tahsilat</th><th class="r">Ödeme</th><th class="r">Net</th></tr></thead><tbody>
+      ${E.map(([k,v])=>`<tr${tik?` class="click" data-go="#cari-${k}"`:""}><td>${esc(tik?cariAd(k):k)}${v.n?` <span class="small muted">· ${v.n} kayıt</span>`:""}</td><td class="r amt" style="color:var(--alacak)">${v.t?m(v.t):""}</td><td class="r amt" style="color:var(--borc)">${v.o?m(v.o):""}</td><td class="r amt">${m(v.t-v.o)}</td></tr>`).join("")}
+      </tbody><tfoot><tr><td>Toplam</td><td class="r amt">${m(R.t)}</td><td class="r amt">${m(R.o)}</td><td class="r amt">${m(net)}</td></tr></tfoot></table></div>`:`<div class="empty">Kayıt yok.</div>`}</section>`; };
+  return `<section class="panel"><div class="pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <button type="button" class="btn" id="thAyG" aria-label="Önceki ay">‹</button><b style="font-size:17px;min-width:130px;text-align:center">${ayTam(R.ay)}</b><button type="button" class="btn" id="thAyI" aria-label="Sonraki ay">›</button>
+    <span style="flex:1"></span><button class="btn" id="ifAyX">Aylık rapor Excel</button><button class="btn" id="ifAyKapat" title="Ay raporunu kapat, tarih aralığına dön">Raporu kapat</button></div></section>
+  <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+    <div class="kpi"><span class="l">${ayTam(R.ay)} tahsilat</span><span class="v" style="color:var(--alacak)">${money(R.t)}</span><span class="n">${R.tn} kayıt ${thYuzde(R.t,O.t)}</span></div>
+    <div class="kpi"><span class="l">${ayTam(R.ay)} ödeme</span><span class="v" style="color:var(--borc)">${money(R.o)}</span><span class="n">${R.on} kayıt ${thYuzde(R.o,O.o,true)}</span></div>
+    <div class="kpi"><span class="l">Net nakit</span><span class="v">${money(net)}</span><span class="n">Tahsilat − ödeme${O.t||O.o?` · önceki ay ${money(O.t-O.o)}`:""}</span></div></div>
+  <section class="panel"><header><h2>${ayTam(R.ay)} · günlük tahsilat ve ödeme</h2><div class="legend"><span><i style="background:var(--alacak)"></i>Tahsilat</span><span><i style="background:var(--borc)"></i>Ödeme</span></div></header><div class="pad"><div id="thChart" style="min-height:200px"></div></div></section>
+  <div class="grid2">${tablo("Ödeme şekline göre",R.kanal,"Ödeme şekli")}${tablo("Kasa / banka hesabına göre",R.hesap,"Hesap")}</div>
+  ${tablo("Cari bazında",R.cari,"Cari",true)}`; }
+function thAyGrafik(W,R){ const n=+aySonu(R.ay).slice(8); if(!R.L.length) return `<div class="empty">Bu ayda tahsilat veya ödeme yok.</div>`;
+  const g=Array.from({length:n},(_,i)=>i+1);
+  return sutunGrafik(W,{etiket:g.map(d=>n>16&&d%2===0&&W<700?"":String(d)),seriler:[{ad:"Tahsilat",renk:"var(--alacak)",v:g.map(d=>R.gun[d]?.t||0)},{ad:"Ödeme",renk:"var(--borc)",v:g.map(d=>R.gun[d]?.o||0)}],yukseklik:200}); }
+function thAyExcel(ay){ const R=thAyRapor(ay), E=K=>Object.entries(K);
+  excel(`Tahsilat_odeme_${ay}.xlsx`,[
+    {name:"Özet",rows:[["Ay",ayTam(ay)],["Tahsilat",r2(R.t)],["Tahsilat adedi",R.tn],["Ödeme",r2(R.o)],["Ödeme adedi",R.on],["Net",r2(R.t-R.o)]]},
+    {name:"Cari",rows:[["Cari","Tahsilat","Ödeme","Net","Kayıt"],...E(R.cari).map(([k,v])=>[cariAd(k),r2(v.t),r2(v.o),r2(v.t-v.o),v.n])]},
+    {name:"Ödeme şekli",rows:[["Ödeme şekli","Tahsilat","Ödeme","Net"],...E(R.kanal).map(([k,v])=>[k,r2(v.t),r2(v.o),r2(v.t-v.o)])]},
+    {name:"Hesap",rows:[["Hesap","Tahsilat","Ödeme","Net"],...E(R.hesap).map(([k,v])=>[k,r2(v.t),r2(v.o),r2(v.t-v.o)])]},
+    {name:"Günlük",rows:[["Gün","Tahsilat","Ödeme"],...Object.entries(R.gun).sort((a,b)=>a[0]-b[0]).map(([d,v])=>[`${pad(d)}.${ay.slice(5)}.${ay.slice(0,4)}`,r2(v.t),r2(v.o)])]},
+    islemSheet([...R.L].sort(sortH))]); }
 function vIslemler(){
-  const f=S.view.if||(S.view.if={tur:"",bas:addDays(TODAY,-90),bit:"",q:""});
+  const f=S.view.if||(S.view.if={tur:"",bas:addDays(TODAY,-90),bit:"",q:"",ay:""});
+  if(f.ay){ f.bas=f.ay+"-01"; f.bit=aySonu(f.ay); }
+  const AR=f.ay?thAyRapor(f.ay):null;
   const q=f.q.toLocaleLowerCase("tr");
   const rows=[...S.hareketler].sort(sortH).reverse().filter(h=>{
     if(f.tur==="th"){ if(!["tahsilat","odeme"].includes(h.tur)) return false; }
@@ -1185,22 +1226,35 @@ function vIslemler(){
   let tT=0,tO=0; for(const h of rows){ if(h.tur==="tahsilat") tT+=tl(h); if(h.tur==="odeme") tO+=tl(h); }
   const html=`<section class="panel"><header><div class="filters">
     <label>İşlem türü<select id="ift"><option value="">Tümü</option><option value="th" ${f.tur==="th"?"selected":""}>Tahsilat + ödeme</option>${Object.entries(TUR).map(([k,v])=>`<option value="${k}" ${f.tur===k?"selected":""}>${v}</option>`).join("")}</select></label>
+    <label>Ay<span style="display:flex;gap:4px"><button type="button" class="btn sm" id="ifAyG" title="Önceki ay" aria-label="Önceki ay">‹</button><input type="month" id="ifay" value="${f.ay||""}" style="min-width:150px"><button type="button" class="btn sm" id="ifAyI" title="Sonraki ay" aria-label="Sonraki ay">›</button></span></label>
     <label>Başlangıç<input type="date" id="ifb" value="${f.bas}"></label><label>Bitiş<input type="date" id="ife" value="${f.bit}"></label>
     <label>Ara<input type="search" id="ifq" value="${esc(f.q)}" placeholder="Cari, hesap, belge, açıklama"></label>
-  </div><button class="btn" data-act="excelIslem">Excel'e aktar</button></header>
+  </div><div class="btns">${f.ay?"":`<button class="btn" id="ifAyAc" title="Bu ayın tahsilat ve ödeme raporunu aç">Aylık rapor</button>`}<button class="btn" data-act="excelIslem">Excel'e aktar</button></div></header>
+  ${f.ay?`<div class="pad small muted" style="padding-bottom:0">${ayTam(f.ay)} ayının tüm kayıtları aşağıda; rapor tahsilat ve ödemeleri TL karşılığıyla özetler.</div>`:""}
   ${rows.length?`${secCubukYer()}<div class="tw"><table><thead><tr>${secTh(rows.slice(0,400).map(h=>h.id))}<th>Tarih</th><th>İşlem</th><th>Cari / hesap</th><th>Belge</th><th>Açıklama</th><th class="r">Tutar</th></tr></thead><tbody>
   ${rows.slice(0,400).map(h=>`<tr class="click${S.sec.has(h.id)?" secili":""}" data-act="islemEdit" data-id="${h.id}">${secTd(h.id)}<td class="mono small">${trDate(h.tarih)}</td><td>${TUR[h.tur]}${exTag(h)}</td><td>${esc(h.cariId?cariAd(h.cariId):hesapAd(h.hesapId)+(h.hedefHesapId?" → "+hesapAd(h.hedefHesapId):""))}</td><td class="small">${esc(h.belgeNo||"")}</td><td class="small muted">${esc(hAciklama(h)||h.kategori||"")}${h.kategori&&h.aciklama?" · "+esc(h.kategori):""}</td><td class="r">${amt(h.tutar,h.doviz)}</td></tr>`).join("")}
   </tbody></table></div>${rows.length>400?`<p class="small muted pad">İlk 400 kayıt gösteriliyor; tarih aralığını daraltın veya Excel'e aktarın.</p>`:""}`:`<div class="empty">Bu filtrelere uyan işlem yok.</div>`}</section>
-  <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+  ${AR?"":`<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
     <div class="kpi"><span class="l">Tahsilat (seçili aralık)</span><span class="v">${money(tT)}</span></div>
     <div class="kpi"><span class="l">Ödeme (seçili aralık)</span><span class="v">${money(tO)}</span></div>
     <div class="kpi"><span class="l">Net</span><span class="v">${money(tT-tO)}</span></div>
-  </div>`;
-  return {title:"Tahsilat ve ödeme",btns:`<button class="btn" data-act="islem" data-tur="odeme" data-w>+ Ödeme</button><button class="btn pri" data-act="islem" data-tur="tahsilat" data-w>+ Tahsilat</button><button class="btn" data-act="islem" data-w>+ Diğer işlem</button>`,html,
+  </div>`}`;
+  const htmlTam=AR?thAyHTML(AR)+html:html;
+  return {title:f.ay?`Tahsilat ve ödeme<span class="sub">${ayTam(f.ay)} raporu</span>`:"Tahsilat ve ödeme",btns:`<button class="btn" data-act="islem" data-tur="odeme" data-w>+ Ödeme</button><button class="btn pri" data-act="islem" data-tur="tahsilat" data-w>+ Tahsilat</button><button class="btn" data-act="islem" data-w>+ Diğer işlem</button>`,html:htmlTam,
     after(){
+      if(AR) canliGrafik("#thChart",W=>thAyGrafik(W,AR));
+      const ayKoy=a=>{ f.ay=a; if(a&&!f.tur) f.tur="th"; if(!a){ f.bas=addDays(TODAY,-90); f.bit=""; } render(); };
+      $("#ifay").addEventListener("change",e=>ayKoy(e.target.value));
+      $("#ifAyG").addEventListener("click",()=>ayKoy(ayKaydir(f.ay||TODAY.slice(0,7),f.ay?-1:0)));
+      $("#ifAyI").addEventListener("click",()=>ayKoy(ayKaydir(f.ay||TODAY.slice(0,7),f.ay?1:0)));
+      $("#ifAyX")?.addEventListener("click",()=>thAyExcel(f.ay));
+      $("#thAyG")?.addEventListener("click",()=>ayKoy(ayKaydir(f.ay,-1)));
+      $("#thAyI")?.addEventListener("click",()=>ayKoy(ayKaydir(f.ay,1)));
+      $("#ifAyAc")?.addEventListener("click",()=>ayKoy(TODAY.slice(0,7)));
+      $("#ifAyKapat")?.addEventListener("click",()=>ayKoy(""));
       $("#ift").addEventListener("change",e=>{f.tur=e.target.value;render();});
-      $("#ifb").addEventListener("change",e=>{f.bas=e.target.value;render();});
-      $("#ife").addEventListener("change",e=>{f.bit=e.target.value;render();});
+      $("#ifb").addEventListener("change",e=>{f.ay="";f.bas=e.target.value;render();});
+      $("#ife").addEventListener("change",e=>{f.ay="";f.bit=e.target.value;render();});
       $("#ifq").addEventListener("input",e=>{f.q=e.target.value;const p=e.target.selectionStart;render();const i=$("#ifq");i.focus();i.setSelectionRange(p,p);});
     }};
 }
@@ -4183,7 +4237,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.11.4";
+const SURUM="1.12.0";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
