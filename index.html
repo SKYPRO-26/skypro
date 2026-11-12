@@ -3355,7 +3355,10 @@ function tkAySecici(ay,on){ const y=+ay.slice(0,4), ty=+TODAY.slice(0,4), yillar
 function tkAySeciciBagla(on,ay,degis){ $("#"+on+"_onc").addEventListener("click",()=>degis(ayKaydir(ay,-1))); $("#"+on+"_snr").addEventListener("click",()=>degis(ayKaydir(ay,1)));
   const al=()=>degis($("#"+on+"_yil").value+"-"+$("#"+on+"_ay").value); $("#"+on+"_ay").addEventListener("change",al); $("#"+on+"_yil").addEventListener("change",al); }
 const sonrakiAySonu = d => iso(new Date(+d.slice(0,4),+d.slice(5,7)+1,0));
-const modulAcik = ad => !!S.ayar?.moduller?.[ad];
+// SKY Mali Müşavirlik'te e-posta modülü ayarlanmamışsa açık gelir; diğer firmalarda kapalı
+const skyFirma = () => { const u=(S.ayar?.firma?.unvan||"").toLocaleUpperCase("tr"); return /\bSKY\b/.test(u)&&/MÜŞAV|MUSAV/.test(u); };
+const MODUL_VARS={ekstreMail:()=>skyFirma()};
+const modulAcik = ad => { const v=S.ayar?.moduller?.[ad]; return v===undefined?!!MODUL_VARS[ad]?.():!!v; };
 const TK_TIP={gelir:{fat:"satis",dek:"alacak_dekont",ad:"Gelir",cari:"Müşteri",tipler:["musteri","ikisi"],ctip:"musteri"},gider:{fat:"alis",dek:"borc_dekont",ad:"Gider",cari:"Tedarikçi",tipler:["tedarikci","ikisi"],ctip:"tedarikci"}};
 const tkTipOf = h => (h.tur==="alis"||h.tur==="borc_dekont")?"gider":"gelir";
 function tkAyar(){ const a=S.data.tahakkuk||(S.data.tahakkuk={mod:"net",ucret:{},gecmis:[]}); a.ucret=a.ucret||{}; a.gider=a.gider||{}; a.gecmis=a.gecmis||[]; a.mod=a.mod||"net"; a.gmod=a.gmod||"net"; return a; }
@@ -4012,7 +4015,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.10.0";
+const SURUM="1.10.1";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
