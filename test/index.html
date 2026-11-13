@@ -188,7 +188,7 @@ tfoot td{font-weight:600;background:var(--surface-2);border-top:1px solid var(--
 .pill.ex{background:var(--warn-soft);color:var(--warn);font-size:11px}
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
 .filters label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
-input[type=text],input[type=date],input[type=search],input[type=email],input[type=tel],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:7px 9px;min-width:0;max-width:100%}
+input[type=text],input[type=date],input[type=search],input[type=email],input[type=tel],input[type=number],input[type=month],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:7px 9px;min-width:0;max-width:100%}
 textarea{resize:vertical;min-height:60px}
 .empty{padding:28px 16px;text-align:center;color:var(--muted)}
 .list{display:flex;flex-direction:column}
@@ -1429,14 +1429,149 @@ function nakitChart(bas,inn,out,cum){
   return s+"</svg>";
 }
 
+/* ---------- MÜKELLEF BİLGİLERİ (Raporlar › Mükellef bilgileri; yalnızca mali müşavirlik bürosu) ---------- */
+const MB_SIRKET={sahis:"Şahıs işletmesi",ltd:"Limited şirket",as:"Anonim şirket",koll:"Kollektif / komandit",koop:"Kooperatif",dernek:"Dernek / vakıf",diger:"Diğer"};
+// alanlar: k=anahtar, ad=başlık, cari=cari kaydındaki alan, tip=date|bool|sel|num|text|ortak, g=grup, v=varsayılan görünür sütun
+const MB_ALAN=[
+  {k:"kod",ad:"Kod",cari:1,g:"Kimlik",v:1},
+  {k:"unvan",ad:"Firma adı",cari:1,g:"Kimlik",v:1},
+  {k:"sirket",ad:"Şirket türü",tip:"sel",sec:MB_SIRKET,g:"Kimlik",v:1},
+  {k:"vkn",ad:"VKN / TCKN",cari:1,g:"Kimlik",v:1},
+  {k:"vd",ad:"Vergi dairesi",cari:1,g:"Kimlik",v:1},
+  {k:"faaliyet",ad:"Faaliyet / NACE",g:"Kimlik"},
+  {k:"sicil",ad:"Ticaret sicil no",g:"Kimlik"},
+  {k:"mersis",ad:"MERSİS no",g:"Kimlik"},
+  {k:"kurulus",ad:"Kuruluş / işe başlama",tip:"date",g:"Kimlik"},
+  {k:"yetkili",ad:"İlgili kişi",cari:1,g:"İletişim",v:1},
+  {k:"tel",ad:"Telefon",cari:1,g:"İletişim",v:1},
+  {k:"tel2",ad:"İkinci telefon",g:"İletişim"},
+  {k:"eposta",ad:"E-posta",cari:1,g:"İletişim",v:1},
+  {k:"kep",ad:"KEP adresi",g:"İletişim"},
+  {k:"adres",ad:"Açık adres",cari:1,g:"İletişim"},
+  {k:"muhur",ad:"Mali mühür bitişi",tip:"date",g:"e-Dönüşüm ve imza",v:1,hat:"Mali mühür yenileme"},
+  {k:"eimza",ad:"e-İmza bitişi",tip:"date",g:"e-Dönüşüm ve imza",hat:"e-İmza yenileme"},
+  {k:"efatura",ad:"e-Fatura",tip:"bool",g:"e-Dönüşüm ve imza"},
+  {k:"earsiv",ad:"e-Arşiv",tip:"bool",g:"e-Dönüşüm ve imza"},
+  {k:"edefter",ad:"e-Defter",tip:"bool",g:"e-Dönüşüm ve imza"},
+  {k:"eirsaliye",ad:"e-İrsaliye",tip:"bool",g:"e-Dönüşüm ve imza"},
+  {k:"sermaye",ad:"Sermaye (₺)",tip:"num",g:"Şirket"},
+  {k:"ortaklar",ad:"Ortaklar",tip:"ortak",g:"Şirket",v:1},
+  {k:"mudur",ad:"Müdür / yönetim kurulu",g:"Şirket"},
+  {k:"mudurBitis",ad:"Müdürlük / YK süresi bitişi",tip:"date",g:"Şirket",hat:"Müdürlük / yönetim kurulu süresi"},
+  {k:"genelKurul",ad:"Son genel kurul",tip:"date",g:"Şirket",v:1},
+  {k:"sgkSicil",ad:"SGK işyeri sicil no",g:"SGK"},
+  {k:"calisan",ad:"Çalışan sayısı",tip:"num",g:"SGK"},
+  {k:"sozBas",ad:"Hizmet sözleşmesi başlangıcı",tip:"date",g:"Hizmet"},
+  {k:"sozBit",ad:"Hizmet sözleşmesi bitişi",tip:"date",g:"Hizmet",hat:"Hizmet sözleşmesi yenileme"},
+  {k:"ucret",ad:"Aylık ücret",tip:"ucret",g:"Hizmet"},
+  {k:"iban",ad:"IBAN",cari:1,g:"Hizmet"},
+  {k:"mbNot",ad:"Not",tip:"uzun",g:"Hizmet"}];
+const mbGrup=[...new Set(MB_ALAN.map(a=>a.g))];
+const mbDeger = (c,a) => a.tip==="ucret"?(S.data?.tahakkuk?.ucret?.[c.id]?.tutar??""):a.cari?(c[a.k]??""):(c.mb?.[a.k]??(a.k==="sirket"?(vtMtTahmin(c)==="sermaye"?(/A\.?\s?Ş|ANON/i.test(c.unvan||"")?"as":"ltd"):"sahis"):""));
+const mbSermaye = c => !["sahis","dernek","diger"].includes(mbDeger(c,{k:"sirket"}));
+const mbMusteriler = tumu => sortedCariler().filter(c=>tumu||["musteri","ikisi"].includes(c.tip));
+const mbKalan = t => { const g=dayDiff(TODAY,t); return g<0?`<span class="pill bad">${-g} gün geçti</span>`:g<=30?`<span class="pill bad">${g} gün</span>`:g<=60?`<span class="pill warn">${g} gün</span>`:""; };
+function mbHucre(c,a){ const v=mbDeger(c,a);
+  if(a.tip==="date") return v?`<span class="mono small">${trDate(v)}</span> ${a.hat?mbKalan(v):""}`:"";
+  if(a.tip==="bool") return v?"✓":"";
+  if(a.tip==="sel") return esc(a.sec[v]||"");
+  if(a.tip==="num"||a.tip==="ucret") return v!==""&&v!=null?`<span class="amt">${a.tip==="ucret"||a.k==="sermaye"?m(+v):esc(String(v))}</span>`:"";
+  if(a.tip==="ortak") return (v||[]).map(o=>`${esc(o.ad)}${o.pay?` <span class="muted">%${esc(String(o.pay))}</span>`:""}`).join("<br>");
+  if(a.k==="genelKurul") return v?`<span class="mono small">${trDate(v)}</span>`:"";
+  return esc(String(v)); }
+function mbMetin(c,a){ const v=mbDeger(c,a);
+  if(a.tip==="date") return v?trDate(v):""; if(a.tip==="bool") return v?"Evet":""; if(a.tip==="sel") return a.sec[v]||"";
+  if(a.tip==="ortak") return (v||[]).map(o=>`${o.ad}${o.tckn?" ("+o.tckn+")":""}${o.pay?" %"+o.pay:""}`).join("; ");
+  if(a.tip==="num"||a.tip==="ucret") return v===""||v==null?"":+v; return String(v); }
+// hatırlatma adayları: mali mühür, e-imza, müdürlük süresi, sözleşme (bitişten 30 gün önce) ve sermaye şirketlerinde olağan genel kurul (31 Mart)
+function mbHatirlatmalar(){ const out=[], var_=new Set(isListe().map(x=>x.vergiKey).filter(Boolean));
+  for(const c of mbMusteriler(true)){ if(!c.mb&&!["musteri","ikisi"].includes(c.tip)) continue;
+    for(const a of MB_ALAN.filter(a=>a.hat)){ const t=mbDeger(c,a); if(!t) continue; const son=addDays(t,-30)<TODAY?TODAY:addDays(t,-30);
+      out.push({c,key:`mb|${a.k}|${c.id}|${t}`,baslik:`${a.hat} · bitiş ${trDate(t)}`,grup:a.hat.split(" ")[0]==="Mali"?"Mali mühür":a.hat.split(" ")[0],son,not:`${a.ad}: ${trDate(t)}. Hatırlatma bitişten 30 gün önceye kuruldu.`}); }
+    if(mbSermaye(c)&&["musteri","ikisi"].includes(c.tip)){ const gk=mbDeger(c,{k:"genelKurul"}), y=+TODAY.slice(0,4), yapildi=(gk&&gk>=`${y}-01-01`)||TODAY>`${y}-03-31`, Y=yapildi?y+1:y; // bu yılın son günü geçtiyse sıradaki yıl
+      out.push({c,key:`mb|gk|${c.id}|${Y-1}`,baslik:`${Y-1} yılı olağan genel kurul`,grup:"Genel kurul",son:`${Y}-03-31`,not:`Olağan genel kurul hesap döneminin bitiminden itibaren 3 ay içinde (31 Mart'a kadar) yapılır.${gk?` Son genel kurul: ${trDate(gk)}.`:""}`}); } }
+  return out.map(x=>({...x,var:var_.has(x.key)})).sort((a,b)=>a.son.localeCompare(b.son)); }
+function mbHatirlatModal(){ const L=mbHatirlatmalar(), yeni=L.filter(x=>!x.var); const sec=new Set(yeni.filter(x=>dayDiff(TODAY,x.son)<=365).map(x=>x.key));
+  modal("Hatırlatmaları iş planına aktar",`<div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+    <p class="small muted" style="margin:0">Mali mühür, e-imza, müdürlük süresi ve sözleşme bitişlerinden <b>30 gün önce</b>; sermaye şirketlerinde <b>31 Mart</b> olağan genel kurul için iş oluşturulur. Daha önce eklenenler tekrar eklenmez.</p>
+    ${yeni.length?`<div class="tw" style="max-height:55vh;overflow:auto"><table><thead><tr><th><input type="checkbox" id="mbhHep" checked aria-label="Tümü"></th><th>Termin</th><th>Firma</th><th>İş</th></tr></thead><tbody>
+    ${yeni.map(x=>`<tr><td><input type="checkbox" data-mbh="${esc(x.key)}" ${sec.has(x.key)?"checked":""}></td><td class="mono small">${trDate(x.son)}</td><td class="small">${esc(x.c.unvan)}</td><td class="small">${esc(x.baslik)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Eklenecek yeni hatırlatma yok.${L.length?` (${L.length} hatırlatma zaten iş planında)`:" Önce mali mühür, genel kurul vb. tarihleri girin."}</div>`}</div>`,
+    `<span class="small muted">${L.length-yeni.length} hatırlatma zaten iş planında</span><div class="btns"><button class="btn" data-act="close">Kapat</button>${yeni.length?`<button class="btn pri" id="mbhGo" data-w>${sec.size} işi ekle</button>`:""}</div>`);
+  const say=()=>{ const b=$("#mbhGo"); if(b){ b.textContent=`${sec.size} işi ekle`; b.disabled=!sec.size; } };
+  $("#mbhHep")?.addEventListener("change",e=>{ document.querySelectorAll("[data-mbh]").forEach(k=>{ k.checked=e.target.checked; k.checked?sec.add(k.dataset.mbh):sec.delete(k.dataset.mbh); }); say(); });
+  document.querySelectorAll("[data-mbh]").forEach(k=>k.addEventListener("change",()=>{ k.checked?sec.add(k.dataset.mbh):sec.delete(k.dataset.mbh); say(); }));
+  $("#mbhGo")?.addEventListener("click",()=>{ const st=stamp(); let n=0;
+    for(const x of yeni) if(sec.has(x.key)){ const id=uid("is"); isler()[id]={id,baslik:x.baslik,firma:x.c.unvan,cariId:x.c.id,grup:x.grup,sonTarih:x.son,oncelik:"normal",durum:"acik",aciklama:x.not,vergiKey:x.key,kaynak:"mukellef",...st}; n++; }
+    closeModal(); changed(); toast(`${n} hatırlatma iş planına eklendi`); }); }
+function mbForm(id){ const c=S.cariler.get(id); if(!c) return; const mb=clone(c.mb||{}); let ort=clone(mbDeger(c,{k:"ortaklar"})||[]);
+  const alan=a=>{ const v=mbDeger(c,a), nm=`mb_${a.k}`;
+    if(a.tip==="ortak"||a.tip==="ucret") return "";
+    if(a.tip==="bool") return `<label class="f" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="${nm}" ${v?"checked":""}> ${a.ad}</label>`;
+    if(a.tip==="sel") return `<div class="f"><label for="${nm}">${a.ad}</label><select id="${nm}" name="${nm}">${Object.entries(a.sec).map(([k,t])=>`<option value="${k}" ${v===k?"selected":""}>${t}</option>`).join("")}</select></div>`;
+    if(a.tip==="uzun"||a.k==="adres") return `<div class="f w"><label for="${nm}">${a.ad}</label><textarea id="${nm}" name="${nm}" rows="2">${esc(v)}</textarea></div>`;
+    return `<div class="f"><label for="${nm}">${a.ad}</label><input id="${nm}" name="${nm}" type="${a.tip==="date"?"date":a.tip==="num"?"number":a.k==="eposta"?"email":"text"}" ${a.tip==="num"?'step="any"':""} value="${esc(v)}" ${a.k==="unvan"?"required":""}></div>`; };
+  const ortCiz=()=>{ $("#mbOrt").innerHTML=ort.length?ort.map((o,i)=>`<div style="display:grid;grid-template-columns:2fr 1.3fr .7fr auto;gap:6px;align-items:center">
+      <input type="text" data-o="${i}" data-k="ad" value="${esc(o.ad||"")}" placeholder="Ad soyad / ünvan" aria-label="Ortak adı"><input type="text" data-o="${i}" data-k="tckn" value="${esc(o.tckn||"")}" placeholder="TCKN / VKN" aria-label="TCKN"><input type="text" data-o="${i}" data-k="pay" value="${esc(o.pay||"")}" placeholder="Pay %" aria-label="Pay yüzdesi" inputmode="decimal"><button type="button" class="btn sm" data-osil="${i}" aria-label="Ortağı sil">✕</button></div>`).join(""):`<span class="small muted">Ortak eklenmedi.</span>`;
+    $("#mbOrt").querySelectorAll("[data-o]").forEach(x=>x.addEventListener("input",()=>ort[+x.dataset.o][x.dataset.k]=x.value.trim()));
+    $("#mbOrt").querySelectorAll("[data-osil]").forEach(b=>b.addEventListener("click",()=>{ ort.splice(+b.dataset.osil,1); ortCiz(); })); };
+  modal(`Mükellef bilgileri · ${esc(c.unvan)}`,`<form class="form" id="mbF">${mbGrup.map(g=>`<div class="f w" style="margin-top:6px"><b style="font-size:13px;color:var(--accent)">${g}</b></div>${MB_ALAN.filter(a=>a.g===g).map(alan).join("")}
+    ${g==="Şirket"?`<div class="f w"><label>Ortaklar</label><div id="mbOrt" style="display:flex;flex-direction:column;gap:6px"></div><button type="button" class="btn sm" id="mbOrtEkle" style="align-self:flex-start;margin-top:4px">+ Ortak ekle</button></div>`:""}
+    ${g==="Hizmet"?`<p class="hint f w" style="margin:0">Aylık ücret, Aylık tahakkuk ekranından gelir. Şifre ve parola bilgilerini buraya yazmayın.</p>`:""}`).join("")}<p class="err" id="mErr" hidden></p></form>`,
+    `<a class="btn" href="#cari-${id}" data-act="close">Cari kartına git</a><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="mbF" data-w>Kaydet</button></div>`);
+  const sh=$("#overlay .sheet"); if(sh){ sh.style.maxWidth="min(860px,96vw)"; sh.style.width="100%"; }
+  ortCiz(); $("#mbOrtEkle").addEventListener("click",()=>{ ort.push({ad:"",tckn:"",pay:""}); ortCiz(); $("#mbOrt [data-k=ad]:last-of-type")?.focus(); });
+  $("#mbF").addEventListener("submit",e=>{ e.preventDefault(); const fd=new FormData(e.target), r={...S.data.cariler[id]}, yeni={...mb};
+    for(const a of MB_ALAN){ if(a.tip==="ortak"||a.tip==="ucret") continue; const nm=`mb_${a.k}`; let v=a.tip==="bool"?fd.has(nm):String(fd.get(nm)??"").trim();
+      if(a.tip==="num"&&v!=="") v=+String(v).replace(",",".");
+      if(a.cari) r[a.k]=v; else if(v===""||v===false) delete yeni[a.k]; else yeni[a.k]=v; }
+    if(!r.unvan) return showErr("Firma adı boş olamaz.");
+    if(r.eposta&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.eposta)) return showErr("E-posta adresi hatalı.");
+    const o=ort.filter(x=>x.ad); if(o.length) yeni.ortaklar=o; else delete yeni.ortaklar;
+    const pt=o.reduce((s,x)=>s+(+String(x.pay||0).replace(",",".")||0),0); if(o.some(x=>x.pay)&&Math.abs(pt-100)>0.01&&!confirm(`Ortak payları toplamı %${pt}. Yine de kaydedilsin mi?`)) return;
+    r.mb=yeni; r.duzenleme=stamp(); S.data.cariler[id]=r;
+    if(yeni.sirket){ const P=vtKayitli(); P[id]={...(P[id]||Object.fromEntries(VT_TUR.filter(t=>t.vars).map(t=>[t.k,true]))),mt:yeni.sirket==="sahis"?"sahis":"sermaye"}; } // vergi takvimindeki türü de günceller
+    closeModal(); changed(); toast("Mükellef bilgileri kaydedildi"); }); }
+function mbSekme(){ const f=S.view.mb||(S.view.mb={q:"",tumu:false,sutun:null,uyari:false});
+  if(!f.sutun){ try{ f.sutun=JSON.parse(localStorage.getItem("skypro_mbsutun")||"null"); }catch{} f.sutun=f.sutun||MB_ALAN.filter(a=>a.v).map(a=>a.k); }
+  const S_=MB_ALAN.filter(a=>f.sutun.includes(a.k)), q=trLow(f.q);
+  let L=mbMusteriler(f.tumu).filter(c=>!q||trLow(MB_ALAN.map(a=>mbMetin(c,a)).join(" ")).includes(q));
+  const yak=c=>MB_ALAN.filter(a=>a.hat).some(a=>{ const t=mbDeger(c,a); return t&&dayDiff(TODAY,t)<=60; });
+  if(f.uyari) L=L.filter(yak);
+  const nYak=mbMusteriler(f.tumu).filter(yak).length, H=mbHatirlatmalar().filter(x=>!x.var).length;
+  return `<section class="panel"><div class="pad" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <input type="search" id="mbq" value="${esc(f.q)}" placeholder="Firma, VKN, kişi, telefon, ortak ara…" style="max-width:300px">
+      <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="mbt" ${f.tumu?"checked":""}> Tedarikçileri de göster</label>
+      <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="mbu" ${f.uyari?"checked":""}> Yalnız 60 gün içinde süresi dolanlar ${nYak?`<span class="pill bad">${nYak}</span>`:""}</label>
+      <span style="flex:1"></span>
+      <details class="is-menu"><summary class="btn sm">Sütunlar (${S_.length}) ▾</summary><div class="is-menu-l" style="max-height:60vh;overflow:auto;min-width:240px">${mbGrup.map(g=>`<div class="mt">${g}</div>${MB_ALAN.filter(a=>a.g===g).map(a=>`<label style="display:flex;gap:8px;padding:4px 10px;font-size:13px"><input type="checkbox" data-mbs="${a.k}" ${f.sutun.includes(a.k)?"checked":""} ${a.k==="unvan"?"disabled":""}> ${a.ad}</label>`).join("")}`).join("")}
+        <hr><button type="button" data-mbsv="tum">Tümünü göster</button><button type="button" data-mbsv="vars">Varsayılana dön</button></div></details>
+      <button class="btn sm" id="mbHat" data-w>🔔 Hatırlatmaları iş planına aktar${H?` (${H})`:""}</button>
+      <button class="btn sm" id="mbX">Excel'e aktar</button></div>
+    <div class="tw" style="max-height:70vh;overflow:auto"><table class="mbT"><thead><tr>${S_.map(a=>`<th class="${a.tip==="num"||a.tip==="ucret"?"r":""}" style="white-space:nowrap;position:sticky;top:0;z-index:2;${a.k==="unvan"?"left:0;z-index:3;":""}">${a.ad}</th>`).join("")}<th style="position:sticky;top:0;z-index:2"></th></tr></thead><tbody>
+    ${L.map(c=>`<tr class="click" data-mbe="${c.id}">${S_.map(a=>`<td class="${a.tip==="num"||a.tip==="ucret"?"r":"small"}" style="${a.k==="unvan"?"position:sticky;left:0;background:var(--surface);font-weight:600;min-width:180px;":""}${a.k==="adres"||a.k==="mbNot"?"min-width:220px;":"white-space:nowrap;"}">${mbHucre(c,a)}</td>`).join("")}<td><button class="btn sm" data-mbe="${c.id}" data-w>Düzenle</button></td></tr>`).join("")||`<tr><td colspan="${S_.length+1}" class="empty">Kayıt yok.</td></tr>`}
+    </tbody></table></div><p class="small muted pad" style="margin:0">${L.length} firma · Satıra tıklayıp bilgileri girin. Mali mühür, e-imza, müdürlük ve sözleşme bitişleri 60 gün kala sarı, 30 gün kala kırmızı görünür.</p></section>`; }
+function mbBagla(){ const f=S.view.mb, yen=()=>{ const y=window.scrollY; render(); window.scrollTo(0,y); };
+  const kay=()=>{ try{ localStorage.setItem("skypro_mbsutun",JSON.stringify(f.sutun)); }catch{} };
+  $("#mbq")?.addEventListener("input",e=>{ f.q=e.target.value; clearTimeout(f._t); f._t=setTimeout(()=>{ yen(); const q=$("#mbq"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); },250); });
+  $("#mbt")?.addEventListener("change",e=>{ f.tumu=e.target.checked; yen(); });
+  $("#mbu")?.addEventListener("change",e=>{ f.uyari=e.target.checked; yen(); });
+  document.querySelectorAll("[data-mbs]").forEach(k=>k.addEventListener("change",()=>{ f.sutun=MB_ALAN.map(a=>a.k).filter(x=>x==="unvan"||(x===k.dataset.mbs?k.checked:f.sutun.includes(x))); kay(); yen(); $(".is-menu")?.setAttribute("open",""); }));
+  document.querySelectorAll("[data-mbsv]").forEach(b=>b.addEventListener("click",()=>{ f.sutun=b.dataset.mbsv==="tum"?MB_ALAN.map(a=>a.k):MB_ALAN.filter(a=>a.v).map(a=>a.k); kay(); yen(); }));
+  document.querySelectorAll("[data-mbe]").forEach(r=>r.addEventListener("click",e=>{ e.stopPropagation(); mbForm(r.dataset.mbe); }));
+  $("#mbHat")?.addEventListener("click",mbHatirlatModal);
+  $("#mbX")?.addEventListener("click",()=>{ const L=mbMusteriler(f.tumu); excel(`Mukellef_bilgileri_${TODAY}.xlsx`,[{name:"Mükellefler",rows:[MB_ALAN.map(a=>a.ad),...L.map(c=>MB_ALAN.map(a=>mbMetin(c,a)))]},
+    {name:"Ortaklar",rows:[["Firma","VKN/TCKN","Ortak","TCKN/VKN","Pay %"],...L.flatMap(c=>(mbDeger(c,{k:"ortaklar"})||[]).map(o=>[c.unvan,c.vkn||"",o.ad,o.tckn||"",o.pay||""]))]}]); }); }
 /* ---------- RAPORLAR ---------- */
 function cariSelect(id,sel){ return `<select id="${id}">${sortedCariler().map(c=>`<option value="${c.id}" ${sel===c.id?"selected":""}>${esc(c.kod)} · ${esc(c.unvan)}</option>`).join("")}</select>`; }
 function vRapor(){
   const rf=S.view.rf||(S.view.rf={cari:sortedCariler()[0]?.id||"",bas:TODAY.slice(0,4)+"-01-01",bit:TODAY,mt:TODAY});
+  const mbVar=modulAcik("mukellefBilgi"); if(!mbVar) rf.sekme="";
+  const sekmeler=mbVar?`<div class="tabs" role="tablist" style="margin-bottom:4px"><button role="tab" aria-selected="${rf.sekme!=="mb"}" data-rsek="">Genel raporlar</button><button role="tab" aria-selected="${rf.sekme==="mb"}" data-rsek="mb">Mükellef bilgileri</button></div>`:"";
+  if(rf.sekme==="mb") return {title:"Raporlar",html:sekmeler+mbSekme(),after(){ document.querySelectorAll("[data-rsek]").forEach(b=>b.addEventListener("click",()=>{ rf.sekme=b.dataset.rsek; render(); })); mbBagla(); }};
   const dovizli=sortedCariler().filter(c=>c.doviz!=="TRY");
   const yasRows=sortedCariler().map(c=>({c,d:S.D.cari.get(c.id)})).filter(x=>x.d.bak>0.004);
   const yasT=[0,0,0,0,0]; for(const x of yasRows) x.d.yas.forEach((v,i)=>yasT[i]+=v*kur(x.c.doviz));
-  const html=`<div class="rcards">
+  const html=`${sekmeler}<div class="rcards">
     <div class="rcard"><h3>Cari bakiye listesi</h3><p>Tüm carilerin borç, alacak ve bakiye toplamları; dövizlilerde TL karşılığı.</p><div class="filters"><button class="btn pri" data-act="excelCari">Excel indir</button></div></div>
     <div class="rcard"><h3>Cari hesap ekstresi</h3><p>Seçilen cari ve tarih aralığı için devirli ekstre.</p>
       <div class="filters" style="flex-direction:column;align-items:stretch"><label>Cari${cariSelect("rfc",rf.cari)}</label><div class="filters"><label>Başlangıç<input type="date" id="rfb" value="${rf.bas}"></label><label>Bitiş<input type="date" id="rfe" value="${rf.bit}"></label></div>
@@ -1455,6 +1590,7 @@ function vRapor(){
   </tbody></table></div><p class="pad small muted" style="margin:0">Bilgi amaçlıdır. Kur farkı faturası veya dekontu düzenlerken Borç/Alacak dekontu ile cariye işleyebilirsiniz.</p></section>`:""}
   <section id="rOut"></section>`;
   return {title:"Raporlar",html,after(){
+    document.querySelectorAll("[data-rsek]").forEach(b=>b.addEventListener("click",()=>{ rf.sekme=b.dataset.rsek; render(); }));
     $("#rfc")?.addEventListener("change",e=>rf.cari=e.target.value);
     $("#rfb").addEventListener("change",e=>rf.bas=e.target.value);
     $("#rfe").addEventListener("change",e=>rf.bit=e.target.value);
@@ -3649,7 +3785,7 @@ function tkAySeciciBagla(on,ay,degis){ $("#"+on+"_onc").addEventListener("click"
 const sonrakiAySonu = d => iso(new Date(+d.slice(0,4),+d.slice(5,7)+1,0));
 // SKY Mali Müşavirlik'te e-posta modülü ayarlanmamışsa açık gelir; diğer firmalarda kapalı
 const skyFirma = () => { const u=(S.ayar?.firma?.unvan||"").toLocaleUpperCase("tr"); return /\bSKY\b/.test(u)&&/MÜŞAV|MUSAV/.test(u); };
-const MODUL_VARS={ekstreMail:()=>skyFirma(),tahakkukMail:()=>skyFirma()};
+const MODUL_VARS={ekstreMail:()=>skyFirma(),tahakkukMail:()=>skyFirma(),mukellefBilgi:()=>skyFirma()};
 const modulAcik = ad => { const v=S.ayar?.moduller?.[ad]; return v===undefined?!!MODUL_VARS[ad]?.():!!v; };
 const TK_TIP={gelir:{fat:"satis",dek:"alacak_dekont",ad:"Gelir",cari:"Müşteri",tipler:["musteri","ikisi"],ctip:"musteri"},gider:{fat:"alis",dek:"borc_dekont",ad:"Gider",cari:"Tedarikçi",tipler:["tedarikci","ikisi"],ctip:"tedarikci"}};
 const tkTipOf = h => (h.tur==="alis"||h.tur==="borc_dekont")?"gider":"gelir";
@@ -4008,6 +4144,8 @@ function modulPanel(){
     <span><b>Ekstre e-postası (Gmail)</b><br><span class="small muted">Müşterilere PDF ekli cari ekstresini firmanın Gmail adresinden tek tek, toplu ya da her ay otomatik gönderir. Firmanın Gmail adresinin Google tarafında izinli listeye eklenmiş olması gerekir.</span></span></label>
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="tahakkukMail" ${modulAcik("tahakkukMail")?"checked":""} style="margin-top:3px">
     <span><b>Tahakkuk gönderimi (Drive › e-posta)</b><br><span class="small muted">Mükelleflerin Google Drive klasöründeki beyanname tahakkuklarını ve SGK hizmet listelerini seçilen dönem için bulur, müşteriye e-postayla gönderir. Mali müşavirlik bürosu için.</span></span></label>
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="mukellefBilgi" ${modulAcik("mukellefBilgi")?"checked":""} style="margin-top:3px">
+    <span><b>Mükellef bilgileri (Raporlar)</b><br><span class="small muted">Müşterilerin vergi, iletişim, mali mühür, e-imza, genel kurul, ortaklar, SGK ve sözleşme bilgilerini tek tabloda tutar; bitiş tarihlerini iş planına hatırlatma olarak aktarır.</span></span></label>
   </div></section>`;
 }
 
@@ -4309,7 +4447,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.13.0-önizleme";
+const SURUM="1.14.0-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
