@@ -1042,7 +1042,7 @@ function vOzet(){
 function evRow(e){
   const g=dayDiff(TODAY,e.vade);
   const lab=g<0?`<span class="pill bad">${-g} gün geçti</span>`:g===0?`<span class="pill warn">bugün</span>`:`<span class="pill">${g} gün</span>`;
-  return `<div class="li click" data-go="${e.ref==="cek"?"#cek-senet":"#cari-"+e.id}" style="cursor:pointer"><span class="d">${trDate(e.vade)}</span><span class="t">${esc(e.ad)}<div class="small muted">${esc(e.tip)}${e.no?" · "+esc(e.no):""} ${lab}</div></span><span class="amt ${e.yon==="in"?"b":"a"}">${e.yon==="in"?"+":"−"} ${money(e.tutar,e.doviz)}</span></div>`;
+  return `<div class="li click" data-go="${e.ref==="cek"?"#cek-senet":"#cari-"+e.id}" style="cursor:pointer"><span class="d">${trDate(e.vade)}</span><span class="t">${esc(e.ad)}<div class="small muted">${esc(e.tip)}${e.no?" · "+esc(e.no):""} ${lab}</div></span><span class="amt" style="color:${e.yon==="in"?"var(--alacak)":"var(--borc)"}">${e.yon==="in"?"+":"−"} ${money(e.tutar,e.doviz)}</span></div>`;
 }
 
 /* ---------- CARİLER ---------- */
@@ -1319,24 +1319,95 @@ function vHesapDetay(id){
 }
 
 /* ---------- VADE TAKVİMİ ---------- */
-function vVade(){
-  const f=S.view.vf||(S.view.vf={fat:true});
-  const ev=vadeOlaylari(f.fat);
-  const grp=[["Vadesi geçmiş",e=>e.vade<TODAY],["Bu hafta (7 gün)",e=>e.vade>=TODAY&&dayDiff(TODAY,e.vade)<=7],["8–30 gün",e=>{const g=dayDiff(TODAY,e.vade);return g>7&&g<=30;}],["30 günden sonra",e=>dayDiff(TODAY,e.vade)>30]];
-  // nakit projeksiyonu
+// her kalem: {vade,yon:in|out,tutar,doviz,tl,g(kalan gün),kaynak:cek|senet|fatura,ad,cariId,no,ref,id,hId}
+function vadeKalemleri(fat){ return vadeOlaylari(fat).filter(e=>e.vade).map(e=>{ const k=e.ref==="cek"?S.cekler.get(e.id):null;
+  return {...e,tl:e.tutar*kur(e.doviz),g:dayDiff(TODAY,e.vade),kaynak:k?(k.tur==="senet"?"senet":"cek"):"fatura",cariId:k?k.cariId:e.id}; }); }
+const VD_DONEM={gec:"Vadesi geçmiş",g7:"7 gün",g30:"30 gün",g90:"90 gün",tum:"Tümü"};
+const VD_KOVA=[["gec","Vadesi geçmiş",e=>e.g<0],["hafta","Bu hafta",e=>e.g>=0&&e.g<=7],["ay","8–30 gün",e=>e.g>7&&e.g<=30],["sonra","30 günden sonra",e=>e.g>30]];
+const vdKalan = g => g<0?`<span class="pill bad">${-g} gün gecikti</span>`:g===0?`<span class="pill warn">bugün</span>`:g<=7?`<span class="pill warn">${g} gün kaldı</span>`:`<span class="pill">${g} gün kaldı</span>`;
+const vdKaynak = e => e.kaynak==="fatura"?(e.no||"Fatura"):`${e.kaynak==="senet"?"Senet":"Çek"}${e.no?" "+e.no:""}`;
+const vdTutar = e => `${money(e.tutar,e.doviz)}${e.doviz!=="TRY"?`<div class="small muted">${money(e.tl)}</div>`:""}`;
+const vdGit = e => e.ref==="cek"?`data-act="cekAct" data-id="${e.id}"`:`data-go="#cari-${e.cariId}"`;
+const vdTop = L => L.reduce((s,e)=>s+e.tl,0);
+function vdTablo(L,yon){ const renk=yon==="in"?"var(--alacak)":"var(--borc)";
+  if(!L.length) return `<div class="empty">${yon==="in"?"Tahsil edilecek":"Ödenecek"} kalem yok.</div>`;
+  return `<div class="tw"><table><thead><tr><th>Vade</th><th>Durum</th><th>Cari / belge</th><th class="r">Tutar</th></tr></thead><tbody>
+    ${VD_KOVA.map(([k,ad,fn])=>{ const G=L.filter(fn); if(!G.length) return "";
+      return `<tr><td colspan="3" style="background:var(--surface-2);font-weight:600;font-size:12.5px;${k==="gec"?"color:var(--borc)":""}">${ad} <span class="muted" style="font-weight:400">· ${G.length} kalem</span></td><td class="r amt" style="background:var(--surface-2);font-weight:600;color:${renk}">${money(vdTop(G))}</td></tr>
+      ${G.map(e=>`<tr class="click" ${vdGit(e)}><td class="mono small" style="white-space:nowrap">${trDate(e.vade)}</td><td>${vdKalan(e.g)}</td><td>${esc(e.ad)}<div class="small muted">${e.kaynak==="fatura"?"🧾":"📄"} ${esc(vdKaynak(e))}</div></td><td class="r amt" style="color:${renk}">${vdTutar(e)}</td></tr>`).join("")}`; }).join("")}
+    </tbody><tfoot><tr><td colspan="3">Toplam · ${L.length} kalem</td><td class="r amt" style="color:${renk}">${money(vdTop(L))}</td></tr></tfoot></table></div>`; }
+function vdNakit(tum){ // 12 hafta: hafta başına giriş, çıkış, hafta sonu tahmini bakiye
   let bas=0; for(const [id,h] of S.hesaplar) bas+=hesapBak(id)*kur(h.doviz);
-  const W=12, inn=Array(W).fill(0), out=Array(W).fill(0);
-  for(const e of ev){ if(!e.vade) continue; let w=Math.floor(dayDiff(TODAY,e.vade)/7); if(w<0) w=0; if(w>=W) continue; const v=e.tutar*kur(e.doviz); if(e.yon==="in") inn[w]+=v; else out[w]+=v; }
-  const cum=[]; let c=bas; for(let i=0;i<W;i++){ c+=inn[i]-out[i]; cum.push(c); }
-  const html=`<section class="panel"><header><h2>Nakit akışı tahmini · 12 hafta</h2>
-    <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="vff" ${f.fat?"checked":""}> Açık fatura vadelerini de dahil et</label></header>
-    <div class="pad"><div id="nakitChart" style="min-height:230px"></div>
-    <div class="legend"><span><i style="background:var(--alacak)"></i>Beklenen giriş</span><span><i style="background:var(--borc)"></i>Beklenen çıkış</span><span><i style="background:var(--accent)"></i>Tahmini kasa+banka</span></div>
-    <p class="small muted">Başlangıç: bugünkü kasa+banka ${money(bas)}. Girişler tahsil edilmemiş müşteri çek/senetleri${f.fat?" ve açık alacak vadeleri":""}; çıkışlar verilen çek/senetler${f.fat?" ve açık borç vadeleri":""}. Vadesi geçmiş kalemler ilk haftaya yazılır.</p></div></section>
-  ${grp.map(([t,fn])=>{const l=ev.filter(e=>e.vade&&fn(e)); const i=l.filter(e=>e.yon==="in").reduce((s,e)=>s+e.tutar*kur(e.doviz),0), o=l.filter(e=>e.yon==="out").reduce((s,e)=>s+e.tutar*kur(e.doviz),0);
-   return `<section class="panel"><header><h2>${t}</h2><span class="small"><span class="amt b">+${money(i)}</span> &nbsp; <span class="amt a">−${money(o)}</span></span></header>${l.length?`<div class="list">${l.map(evRow).join("")}</div>`:`<div class="empty">Kalem yok.</div>`}</section>`;}).join("")}`;
-  return {title:"Vade takvimi",html,after(){ canliGrafik("#nakitChart",W=>sutunGrafik(W,{etiket:Array.from({length:12},(_,i)=>trDate(addDays(TODAY,i*7)).slice(0,5)),seriler:[{ad:"Beklenen giriş",renk:"var(--alacak)",v:inn},{ad:"Beklenen çıkış",renk:"var(--borc)",v:out}],cizgi:{ad:"Tahmini kasa+banka",renk:"var(--accent)",v:cum},yukseklik:230}));
-    $("#vff").addEventListener("change",e=>{f.fat=e.target.checked;render();}); }};
+  const W=12, H=Array.from({length:W},(_,i)=>({bas:addDays(TODAY,i*7),bit:addDays(TODAY,i*7+6),i:0,o:0}));
+  for(const e of tum){ let w=Math.floor(e.g/7); if(w<0) w=0; if(w>=W) continue; e.yon==="in"?H[w].i+=e.tl:H[w].o+=e.tl; }
+  let c=bas; for(const h of H){ c+=h.i-h.o; h.son=c; }
+  return {bas,H,min:H.reduce((a,h)=>h.son<a.son?h:a,H[0])}; }
+function vVade(){
+  const f=S.view.vf||(S.view.vf={}); f.fat??=true; f.mod??="liste"; f.yon??=""; f.kay??=""; f.don??="g90"; f.q??=""; f.ay??=TODAY.slice(0,7); f.gun??="";
+  const tum=vadeKalemleri(f.fat), N=vdNakit(tum);
+  const ufuk={gec:-1,g7:7,g30:30,g90:90,tum:1e9}[f.don];
+  const ev=tum.filter(e=>(!f.yon||e.yon===f.yon)&&(!f.kay||(f.kay==="cek"?e.kaynak!=="fatura":e.kaynak==="fatura"))&&(!f.q||trLow(e.ad+" "+(e.no||"")).includes(trLow(f.q)))&&(f.mod==="takvim"||(f.don==="gec"?e.g<0:e.g<=ufuk)));
+  const gin=tum.filter(e=>e.g<0&&e.yon==="in"), gout=tum.filter(e=>e.g<0&&e.yon==="out");
+  const in30=tum.filter(e=>e.g>=0&&e.g<=30&&e.yon==="in"), out30=tum.filter(e=>e.g>=0&&e.g<=30&&e.yon==="out");
+  const tah30=N.H.slice(0,5).at(-1).son; // ~30 gün sonu (5. hafta sonu)
+  const kart=(l,v,n,renk,act)=>`<div class="kpi${act?" click":""}" ${act||""} style="${act?"cursor:pointer":""}"><span class="l">${l}</span><span class="v" style="color:${renk||"inherit"}">${v}</span><span class="n">${n}</span></div>`;
+  const seg=(id,v,opts)=>`<div class="seg" data-vdseg="${id}" role="group">${opts.map(([k,t])=>`<button type="button" data-v="${k}" aria-pressed="${v===k}">${t}</button>`).join("")}</div>`;
+  const kpis=`<div class="kpis">
+    ${kart("30 gün içinde tahsil edilecek",money(vdTop(in30)),`${in30.length} kalem${gin.length?` · ayrıca <b style="color:var(--borc)">${money(vdTop(gin))}</b> gecikmiş`:""}`,"var(--alacak)",`data-vdkart="in"`)}
+    ${kart("30 gün içinde ödenecek",money(vdTop(out30)),`${out30.length} kalem${gout.length?` · ayrıca <b style="color:var(--borc)">${money(vdTop(gout))}</b> gecikmiş`:""}`,"var(--borc)",`data-vdkart="out"`)}
+    ${kart("Vadesi geçmiş alacak",money(vdTop(gin)),gin.length?`${gin.length} kalem · en eski ${-Math.min(...gin.map(e=>e.g))} gün`:"Gecikmiş alacak yok",gin.length?"var(--borc)":"",`data-vdkart="gec"`)}
+    ${kart("Kasa + banka",money(N.bas),`30 gün sonra tahmini: <b style="color:${tah30<0?"var(--borc)":"inherit"}">${money(tah30)}</b>`)}
+  </div>`;
+  const uyari=N.min.son<0?`<div class="notice warn"><b>Nakit uyarısı:</b> ${trDate(N.min.bas)}–${trDate(N.min.bit)} haftasında tahmini kasa+banka bakiyesi <b>${money(N.min.son)}</b>'ye düşüyor. Aşağıdaki nakit tahmini tablosuna bakın.</div>`:"";
+  const arac=`<section class="panel"><div class="pad" style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+      ${seg("mod",f.mod,[["liste","☰ Liste"],["takvim","📅 Takvim"]])}
+      ${seg("yon",f.yon,[["","Tümü"],["in","Tahsil edilecek"],["out","Ödenecek"]])}
+      ${seg("kay",f.kay,[["","Çek, senet ve fatura"],["cek","Yalnız çek/senet"],["fatura","Yalnız fatura"]])}
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+      ${f.mod==="liste"?`<span class="small muted">Dönem:</span>${seg("don",f.don,Object.entries(VD_DONEM))}`:""}
+      <input type="search" id="vdq" value="${esc(f.q)}" placeholder="Cari veya belge ara" style="max-width:220px">
+      <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="vff" ${f.fat?"checked":""}> Açık fatura vadelerini dahil et</label>
+      <span style="flex:1"></span><button class="btn sm" id="vdX">Excel'e aktar</button>
+    </div></div></section>`;
+  let govde;
+  if(f.mod==="liste"){
+    const IN=ev.filter(e=>e.yon==="in"), OUT=ev.filter(e=>e.yon==="out");
+    const pan=(yon,L)=>`<section class="panel" style="border-top:3px solid ${yon==="in"?"var(--alacak)":"var(--borc)"}"><header><h2>${yon==="in"?"⬇ Tahsil edilecekler":"⬆ Ödenecekler"}</h2><span class="amt" style="font-weight:600;color:${yon==="in"?"var(--alacak)":"var(--borc)"}">${money(vdTop(L))}</span></header>${vdTablo(L,yon)}</section>`;
+    govde=f.yon?pan(f.yon,f.yon==="in"?IN:OUT):`<div class="grid2">${pan("in",IN)}${pan("out",OUT)}</div>`;
+  } else {
+    const ay=f.ay, ilk=new Date(ay+"-01T12:00:00"), bosluk=(ilk.getDay()+6)%7, n=+aySonu(ay).slice(8), gunler={};
+    for(const e of ev) if(e.vade.startsWith(ay)) (gunler[e.vade]||(gunler[e.vade]=[])).push(e);
+    const once=ev.filter(e=>e.vade<ay+"-01"&&e.g<0);
+    const hucre=d=>{ const t=`${ay}-${pad(d)}`, L=gunler[t]||[], i=vdTop(L.filter(e=>e.yon==="in")), o=vdTop(L.filter(e=>e.yon==="out")), gec=t<TODAY&&L.length;
+      return `<button type="button" class="gun${t===TODAY?" bugun":""}${f.gun===t?" sec":""}" data-vdgun="${t}" aria-label="${trDate(t)}: ${L.length} kalem">
+        <span class="no">${d}</span>${L.slice(0,3).map(e=>`<span class="ci ${e.yon==="in"?"g":"r"}" title="${e.yon==="in"?"Tahsil edilecek":"Ödenecek"}: ${esc(e.ad)} · ${esc(money(e.tutar,e.doviz))}">${e.yon==="in"?"+":"−"}${m(e.tl)} · ${esc(e.ad)}</span>`).join("")}${L.length>3?`<span class="daha">+${L.length-3} kalem daha</span>`:""}${L.length>1?`<span class="daha">${i?`<span style="color:var(--alacak)">+${m(i)}</span> `:""}${o?`<span style="color:var(--borc)">−${m(o)}</span>`:""}</span>`:""}${gec?`<span class="tt">gecikmiş</span>`:""}</button>`; };
+    const sec=f.gun&&f.gun.startsWith(ay)?(gunler[f.gun]||[]):null;
+    govde=`<section class="panel"><div class="tkv-bas"><div style="display:flex;gap:6px;align-items:center"><button class="btn sm" data-vday="-1" aria-label="Önceki ay">‹</button><h3 style="min-width:140px;text-align:center">${ayTam(ay)}</h3><button class="btn sm" data-vday="1" aria-label="Sonraki ay">›</button>${ay!==TODAY.slice(0,7)?`<button class="btn sm" data-vday="0">Bu ay</button>`:""}</div>
+      <span class="small"><span style="color:var(--alacak)">+${money(vdTop(ev.filter(e=>e.vade.startsWith(ay)&&e.yon==="in")))}</span> &nbsp; <span style="color:var(--borc)">−${money(vdTop(ev.filter(e=>e.vade.startsWith(ay)&&e.yon==="out")))}</span></span></div>
+      ${once.length&&ay===TODAY.slice(0,7)?`<div class="notice warn small" style="margin:0 18px 10px">Bu aydan önce vadesi geçmiş ${once.length} kalem var (${money(vdTop(once))}). Liste görünümünde "Vadesi geçmiş" ile görebilirsiniz.</div>`:""}
+      <div class="tkv">${["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"].map(g=>`<div class="gh">${g}</div>`).join("")}${"<div class='gun dis' aria-hidden='true'></div>".repeat(bosluk)}${Array.from({length:n},(_,i)=>hucre(i+1)).join("")}</div>
+      ${sec?`<div class="tkv-gun-bas"><h3 style="margin:0">${trDate(f.gun)} · ${sec.length} kalem</h3></div>${sec.length?`<div class="grid2" style="padding:0 18px 18px">${["in","out"].filter(y=>sec.some(e=>e.yon===y)).map(y=>`<div style="grid-column:${sec.every(e=>e.yon===y)?"1 / -1":"auto"}"><div class="small" style="font-weight:600;margin-bottom:6px;color:${y==="in"?"var(--alacak)":"var(--borc)"}">${y==="in"?"Tahsil edilecek":"Ödenecek"}</div>${vdTablo(sec.filter(e=>e.yon===y),y)}</div>`).join("")}</div>`:`<div class="empty">Bu gün vadesi gelen kalem yok.</div>`}`:`<p class="small muted pad" style="margin:0">Bir güne tıklayınca o günün kalemleri burada listelenir.</p>`}</section>`;
+  }
+  const nakit=`<section class="panel"><header><h2>Nakit tahmini · 12 hafta</h2><span class="small muted">Bugün kasa+banka ${money(N.bas)}</span></header>
+    <div class="tw"><table><thead><tr><th>Hafta</th><th class="r">Beklenen giriş</th><th class="r">Beklenen çıkış</th><th class="r">Hafta sonu tahmini bakiye</th></tr></thead><tbody>
+    ${N.H.map((h,i)=>`<tr${h.son<0?` style="background:var(--borc-soft)"`:""}><td class="small">${trDate(h.bas)} – ${trDate(h.bit)}${i===0&&(gin.length||gout.length)?` <span class="muted">(gecikmişler dahil)</span>`:""}</td><td class="r amt" style="color:var(--alacak)">${h.i?m(h.i):"—"}</td><td class="r amt" style="color:var(--borc)">${h.o?m(h.o):"—"}</td><td class="r amt" style="font-weight:600;${h.son<0?"color:var(--borc)":""}">${m(h.son)}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="small muted pad" style="margin:0">Girişler: tahsil edilmemiş müşteri çek/senetleri${f.fat?" ve açık alacak faturaları":""}. Çıkışlar: verilen çek/senetler${f.fat?" ve açık borç faturaları":""}. Vadesi geçmiş kalemler ilk haftaya yazılır; müşterinin vadesinde ödeyeceği varsayılır.</p></section>`;
+  const html=kpis+uyari+arac+govde+nakit;
+  return {title:"Vade takvimi",html,after(){
+    const yen=()=>{ const y=window.scrollY; render(); window.scrollTo(0,y); };
+    document.querySelectorAll("[data-vdseg]").forEach(g=>g.addEventListener("click",e=>{ const b=e.target.closest("button[data-v]"); if(!b) return; f[g.dataset.vdseg]=b.dataset.v; yen(); }));
+    document.querySelectorAll("[data-vdkart]").forEach(k=>k.addEventListener("click",()=>{ const v=k.dataset.vdkart; f.mod="liste"; if(v==="gec"){ f.yon="in"; f.don="gec"; } else { f.yon=v; f.don="g30"; } yen(); $("[data-vdseg=mod]")?.scrollIntoView({behavior:"smooth",block:"start"}); }));
+    $("#vff").addEventListener("change",e=>{ f.fat=e.target.checked; yen(); });
+    $("#vdq").addEventListener("input",e=>{ f.q=e.target.value; clearTimeout(f._t); f._t=setTimeout(()=>{ yen(); const q=$("#vdq"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); },250); });
+    document.querySelectorAll("[data-vday]").forEach(b=>b.addEventListener("click",()=>{ const d=+b.dataset.vday; f.ay=d?ayKaydir(f.ay,d):TODAY.slice(0,7); f.gun=""; yen(); }));
+    document.querySelectorAll("[data-vdgun]").forEach(b=>b.addEventListener("click",()=>{ f.gun=f.gun===b.dataset.vdgun?"":b.dataset.vdgun; yen(); }));
+    $("#vdX").addEventListener("click",()=>excel(`Vade_takvimi_${TODAY}.xlsx`,[
+      {name:"Kalemler",rows:[["Vade","Kalan gün","Yön","Kaynak","Cari","Belge","Tutar","Döviz","TL karşılığı"],...ev.slice().sort((a,b)=>a.vade.localeCompare(b.vade)).map(e=>[trDate(e.vade),e.g,e.yon==="in"?"Tahsil edilecek":"Ödenecek",e.kaynak==="fatura"?"Fatura":e.kaynak==="senet"?"Senet":"Çek",e.ad,e.no||"",r2(e.tutar),e.doviz,r2(e.tl)])]},
+      {name:"Nakit tahmini",rows:[["Hafta başı","Hafta sonu","Giriş","Çıkış","Tahmini bakiye"],...N.H.map(h=>[trDate(h.bas),trDate(h.bit),r2(h.i),r2(h.o),r2(h.son)])]}]));
+  }};
 }
 function nakitChart(bas,inn,out,cum){
   const W=720,H=240,L=78,R=12,T=14,B=30,w=W-L-R,h=H-T-B;
@@ -4238,7 +4309,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.12.0-önizleme";
+const SURUM="1.13.0-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
