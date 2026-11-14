@@ -1046,26 +1046,44 @@ function evRow(e){
 }
 
 /* ---------- CARİLER ---------- */
-function vCariler(){
-  const f=S.view.cf||(S.view.cf={q:"",tip:"",bak:false});
-  const q=f.q.toLocaleLowerCase("tr");
-  const rows=sortedCariler().filter(c=>{
+/* cari listesi filtreleri: bakiye durumu, tip, arama, en az tutar, sıralama */
+const CF_DURUM=[["","Tümü"],["borclu","Borçlu (bize borçlu)"],["alacakli","Alacaklı (biz borçluyuz)"],["bakiyeli","Bakiyeli"],["sifir","Bakiyesi sıfır"],["gecikmis","Vadesi geçmiş alacağı olan"],["limit","Risk limitini aşan"],["hareketsiz","90 gündür hareketsiz"]];
+const CF_SIRA={kod:"Koda göre",unvan:"Ünvana göre (A–Z)",bakiye:"Bakiye (büyükten küçüğe)",gecikme:"Vadesi geçmiş tutar",son:"Son hareket (yeni → eski)"};
+const cfTL = c => S.D.cari.get(c.id).bak*kur(c.doviz);
+const cfGec = c => S.D.cari.get(c.id).acik.reduce((s,k)=>s+(k.yon==="b"&&k.vade&&k.vade<TODAY&&!["tahsilat","odeme"].includes(k.h?.tur)?k.acik:0),0)*kur(c.doviz);
+const CF_TEST={borclu:c=>cfTL(c)>0.004,alacakli:c=>cfTL(c)<-0.004,bakiyeli:c=>Math.abs(cfTL(c))>0.004,sifir:c=>Math.abs(cfTL(c))<=0.004,
+  gecikmis:c=>cfGec(c)>0.004,limit:c=>{ const l=num(c.limit), d=S.D.cari.get(c.id); return l>0&&d.risk>l; },hareketsiz:c=>{ const d=S.D.cari.get(c.id); return !d.son||d.son<addDays(TODAY,-90); }};
+function cariFiltre(f,durumHaric){ const q=(f.q||"").toLocaleLowerCase("tr"), enaz=num(f.enaz);
+  let L=sortedCariler().filter(c=>{
     if(f.tip && c.tip!==f.tip && !(f.tip!=="diger"&&c.tip==="ikisi"&&["musteri","tedarikci"].includes(f.tip))) return false;
-    if(f.bak && Math.abs(S.D.cari.get(c.id).bak)<0.005) return false;
-    if(q && !((c.unvan||"")+" "+(c.kod||"")+" "+(c.vkn||"")).toLocaleLowerCase("tr").includes(q)) return false;
-    return true;
-  });
+    if(q && !((c.unvan||"")+" "+(c.kod||"")+" "+(c.vkn||"")+" "+(c.yetkili||"")+" "+(c.tel||"")).toLocaleLowerCase("tr").includes(q)) return false;
+    if(enaz>0 && Math.abs(cfTL(c))<enaz) return false;
+    return true; });
+  if(!durumHaric&&f.durum) L=L.filter(CF_TEST[f.durum]);
+  const s=f.sira||"kod";
+  if(s==="unvan") L.sort((a,b)=>(a.unvan||"").localeCompare(b.unvan||"","tr"));
+  else if(s==="bakiye") L.sort((a,b)=>Math.abs(cfTL(b))-Math.abs(cfTL(a)));
+  else if(s==="gecikme") L.sort((a,b)=>cfGec(b)-cfGec(a));
+  else if(s==="son") L.sort((a,b)=>(S.D.cari.get(b.id).son||"").localeCompare(S.D.cari.get(a.id).son||""));
+  return L; }
+function vCariler(){
+  const f=S.view.cf||(S.view.cf={q:"",tip:"",durum:"",sira:"kod",enaz:""});
+  if(f.bak){ f.durum=f.durum||"bakiyeli"; delete f.bak; } // eski "sadece bakiyeli" seçimi
+  const rows=cariFiltre(f), taban=cariFiltre(f,true);
   let tB=0,tA=0;
   const body=rows.map(c=>{ const d=S.D.cari.get(c.id); const v=d.bak*kur(c.doviz); if(v>0)tB+=v; else tA-=v;
     const lim=num(c.limit); const asim=lim>0&&d.risk>lim;
-    return `<tr class="click" tabindex="0" data-go="#cari-${c.id}"><td class="mono small">${esc(c.kod)}</td><td>${esc(c.unvan)}${exTag(c)}${asim?` <span class="pill bad">limit aşıldı</span>`:""}<div class="small muted">${CTIP[c.tip]||""}${c.doviz!=="TRY"?" · "+c.doviz:""}</div></td><td class="r">${bal(d.bak,c.doviz)}</td><td class="r">${c.doviz!=="TRY"?`<span class="amt muted">${money(d.bak*kur(c.doviz))}</span>`:""}</td><td class="mono small muted">${trDate(d.son)}</td></tr>`;}).join("");
+    const gec=cfGec(c);
+    return `<tr class="click" tabindex="0" data-go="#cari-${c.id}"><td class="mono small">${esc(c.kod)}</td><td>${esc(c.unvan)}${exTag(c)}${asim?` <span class="pill bad">limit aşıldı</span>`:""}${gec>0.004?` <span class="pill bad" title="Vadesi geçmiş açık alacak">${money(gec)} gecikmiş</span>`:""}<div class="small muted">${CTIP[c.tip]||""}${c.doviz!=="TRY"?" · "+c.doviz:""}${c.yetkili?" · "+esc(c.yetkili):""}</div></td><td class="r">${bal(d.bak,c.doviz)}</td><td class="r">${c.doviz!=="TRY"?`<span class="amt muted">${money(d.bak*kur(c.doviz))}</span>`:""}</td><td class="mono small muted">${trDate(d.son)}</td></tr>`;}).join("");
   const eski=S.canEdit?eskiKodlu():[];
   const html=`${eski.length?`<div class="notice" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${eski.length} carinin kodu eski <b>C</b> düzeninde (${esc(eski[0].kod)}…). Müşterileri <b>M</b>, satıcıları <b>S</b> ile başlayacak şekilde yeniden kodlayabilirsiniz.</span><button class="btn sm" data-act="kodDuzenle" data-w>Kodları yeniden düzenle</button></div>`:""}
   <section class="panel"><header><div class="filters">
-    <label>Ara<input type="search" id="cfq" value="${esc(f.q)}" placeholder="Ünvan, kod, VKN"></label>
+    <label>Ara<input type="search" id="cfq" value="${esc(f.q)}" placeholder="Ünvan, kod, VKN, yetkili, telefon"></label>
     <label>Tip<select id="cftip"><option value="">Tümü</option>${Object.entries(CTIP).map(([k,v])=>`<option value="${k}" ${f.tip===k?"selected":""}>${v}</option>`).join("")}</select></label>
-    <label style="flex-direction:row;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="cfbak" ${f.bak?"checked":""}> Sadece bakiyeli</label>
-  </div><button class="btn" data-act="excelCari">Excel'e aktar</button></header>
+    <label>Sıralama<select id="cfsira">${Object.entries(CF_SIRA).map(([k,v])=>`<option value="${k}" ${(f.sira||"kod")===k?"selected":""}>${v}</option>`).join("")}</select></label>
+    <label>En az bakiye (₺)<input type="text" id="cfenaz" value="${esc(f.enaz||"")}" placeholder="örn. 1000" inputmode="decimal" style="width:120px"></label>
+  </div><button class="btn" data-act="excelCari" title="Ekranda süzülen listeyi aktarır">Excel'e aktar</button></header>
+  <div class="pad" style="padding-top:0"><div class="seg" id="cfdur" role="group" aria-label="Bakiye durumu">${CF_DURUM.map(([k,v])=>{ const n=k?taban.filter(CF_TEST[k]).length:taban.length; return (k&&!n&&f.durum!==k)?"":`<button type="button" data-v="${k}" aria-pressed="${(f.durum||"")===k}">${v} <span class="${(f.durum||"")===k?"":"muted"}">${n}</span></button>`; }).join("")}</div></div>
   ${rows.length?`<div class="tw"><table><thead><tr><th>Kod</th><th>Ünvan</th><th class="r">Bakiye</th><th class="r">TL karşılığı</th><th>Son hareket</th></tr></thead><tbody>${body}</tbody>
   <tfoot><tr><td></td><td>${rows.length} cari</td><td class="r" colspan="2"><span class="amt a">${money(tB)}<i>B</i></span> &nbsp; <span class="amt b">${money(tA)}<i>A</i></span></td><td></td></tr></tfoot></table></div>`
   :`<div class="empty">${S.cariler.size?"Filtreye uyan cari yok.":"Henüz cari kartı yok. Sağ üstten <b>Yeni cari</b> ile başlayın."}</div>`}</section>
@@ -1075,7 +1093,9 @@ function vCariler(){
     after(){
       $("#cfq").addEventListener("input",e=>{f.q=e.target.value; const p=e.target.selectionStart; render(); const i=$("#cfq"); i.focus(); i.setSelectionRange(p,p);});
       $("#cftip").addEventListener("change",e=>{f.tip=e.target.value;render();});
-      $("#cfbak").addEventListener("change",e=>{f.bak=e.target.checked;render();});
+      $("#cfsira").addEventListener("change",e=>{f.sira=e.target.value;render();});
+      $("#cfenaz").addEventListener("change",e=>{f.enaz=e.target.value.trim();render();});
+      $("#cfdur").addEventListener("click",e=>{ const b=e.target.closest("button[data-v]"); if(!b) return; f.durum=b.dataset.v; render(); });
     }};
 }
 
@@ -2086,9 +2106,9 @@ async function excel(filename,sheets){
   saveFile(filename,zipStore(files));
 }
 const fn = s => String(s||"").replace(/[^\p{L}\p{N}]+/gu,"_").replace(/^_|_$/g,"").slice(0,40);
-function cariSheet(){
+function cariSheet(liste){
   const rows=[["Kod","Ünvan","Tip","VKN/TCKN","Para birimi","Toplam borç","Toplam alacak","Bakiye","B/A","TL karşılığı (güncel kur)","Risk limiti","Son hareket"]];
-  for(const c of sortedCariler()){ const d=S.D.cari.get(c.id); rows.push([c.kod,c.unvan,CTIP[c.tip],c.vkn||"",c.doviz,r2(d.borc),r2(d.alacak),r2(Math.abs(d.bak)),d.bak>0.004?"B":d.bak<-0.004?"A":"",r2(d.bak*kur(c.doviz)),c.limit||"",d.son?trDate(d.son):""]); }
+  for(const c of liste||sortedCariler()){ const d=S.D.cari.get(c.id); rows.push([c.kod,c.unvan,CTIP[c.tip],c.vkn||"",c.doviz,r2(d.borc),r2(d.alacak),r2(Math.abs(d.bak)),d.bak>0.004?"B":d.bak<-0.004?"A":"",r2(d.bak*kur(c.doviz)),c.limit||"",d.son?trDate(d.son):""]); }
   return {name:"Cari bakiyeler",rows};
 }
 function islemSheet(list){
@@ -2161,7 +2181,7 @@ const ACT={
     if(await del("cariler",id)){ toast("Cari silindi"); location.hash="#cariler"; }
   },
   async hesapSil(el){ if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent="Silmeyi onayla"; return; } if(await del("hesaplar",el.dataset.id)){ closeModal(); toast("Hesap silindi"); location.hash="#kasa-banka"; } },
-  excelCari:()=>excel(`Cari_bakiyeler_${TODAY}.xlsx`,[cariSheet()]),
+  excelCari:()=>{ const f=S.view.cf||{}; excel(`Cari_bakiyeler${f.durum?"_"+f.durum:""}_${TODAY}.xlsx`,[cariSheet(cariFiltre(f))]); },
   excelIslem:()=>{ const f=S.view.if; const list=[...S.hareketler].sort(sortH).filter(h=>(!f.tur||(f.tur==="th"?["tahsilat","odeme"].includes(h.tur):h.tur===f.tur))&&(!f.bas||h.tarih>=f.bas)&&(!f.bit||h.tarih<=f.bit)); excel(`Islemler_${TODAY}.xlsx`,[islemSheet(list)]); },
   excelCek:()=>excel(`Cek_senet_${TODAY}.xlsx`,[cekSheet()]),
   excelHesap:el=>{ const h=S.hesaplar.get(el.dataset.id); let run=num(h.acilis)||0; const rows=[["Tarih","İşlem","Karşı taraf","Açıklama","Giriş","Çıkış","Bakiye"],["","Açılış bakiyesi","","","","",run]]; for(const [x,v] of S.D.hes.get(h.id).list){ run+=v; rows.push([trDate(x.tarih),TUR[x.tur],x.cariId?cariAd(x.cariId):(x.kategori||""),x.aciklama||"",v>0?v:"",v<0?-v:"",r2(run)]); } excel(`${fn(h.ad)}_${TODAY}.xlsx`,[{name:"Hesap hareketleri",rows}]); },
@@ -4447,7 +4467,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.14.0-önizleme";
+const SURUM="1.15.0-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
