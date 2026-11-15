@@ -310,6 +310,7 @@ tr.secili td{background:var(--accent-soft)!important}
       <li><a href="#cariler">Cari hesaplar</a></li>
       <li id="navTk" hidden><a href="#tahakkuk">Aylık tahakkuk</a></li>
       <li id="navTm" hidden><a href="#tahakkuk-gonder">Tahakkuk gönderimi</a></li>
+      <li id="navKk" hidden><a href="#kk-luca">Kredi kartı › LUCA</a></li>
       <li><a href="#islemler">Tahsilat ve ödeme</a></li>
       <li><a href="#cek-senet">Çek ve senet <span class="cnt" id="cekCnt" hidden></span></a></li>
       <li><a href="#kasa-banka">Kasa ve banka</a></li>
@@ -962,18 +963,18 @@ function dbErr(){}
 
 
 /* ---------- yönlendirme ---------- */
-const TITLES={ozet:"Özet",isler:"Yapılacak işler",tahakkuk:"Aylık tahakkuk",["tahakkuk-gonder"]:"Tahakkuk gönderimi",["hizli-giris"]:"Hızlı kayıt",cariler:"Cari hesaplar",islemler:"Tahsilat ve ödeme",["cek-senet"]:"Çek ve senet",["kasa-banka"]:"Kasa ve banka",vade:"Vade takvimi",["gelir-gider"]:"Gelir ve gider",raporlar:"Raporlar",ayarlar:"Ayarlar"};
+const TITLES={ozet:"Özet",isler:"Yapılacak işler",tahakkuk:"Aylık tahakkuk",["tahakkuk-gonder"]:"Tahakkuk gönderimi",["kk-luca"]:"Kredi kartı › LUCA",["hizli-giris"]:"Hızlı kayıt",cariler:"Cari hesaplar",islemler:"Tahsilat ve ödeme",["cek-senet"]:"Çek ve senet",["kasa-banka"]:"Kasa ve banka",vade:"Vade takvimi",["gelir-gider"]:"Gelir ve gider",raporlar:"Raporlar",ayarlar:"Ayarlar"};
 function route(){ return (location.hash||"#ozet").slice(1) || "ozet"; }
 window.addEventListener("hashchange",()=>{ render(); window.scrollTo(0,0); });
 
 function render(){
   if(!S.D) return;
-  $("#navTk").hidden=!modulAcik("tahakkuk"); $("#navTm").hidden=!modulAcik("tahakkukMail");
+  $("#navTk").hidden=!modulAcik("tahakkuk"); $("#navTm").hidden=!modulAcik("tahakkukMail"); $("#navKk").hidden=!modulAcik("kkLuca");
   const r=route();
   let base=r; if(r.startsWith("cari-")) base="cariler"; if(r.startsWith("hesap-")) base="kasa-banka";
   if(!TITLES[base]) base="ozet";
   document.querySelectorAll("#navList a").forEach(a=>a.setAttribute("aria-current",a.getAttribute("href")==="#"+base?"page":"false"));
-  const V={ozet:vOzet,isler:vIsler,tahakkuk:vTahakkuk,"hizli-giris":vHizli,cariler:vCariler,islemler:vIslemler,"cek-senet":vCek,"kasa-banka":vKasa,vade:vVade,"tahakkuk-gonder":vTahakkukGonder,"gelir-gider":vGelirGider,raporlar:vRapor,ayarlar:vAyar};
+  const V={ozet:vOzet,isler:vIsler,tahakkuk:vTahakkuk,"hizli-giris":vHizli,cariler:vCariler,islemler:vIslemler,"cek-senet":vCek,"kasa-banka":vKasa,vade:vVade,"tahakkuk-gonder":vTahakkukGonder,"kk-luca":vKkLuca,"gelir-gider":vGelirGider,raporlar:vRapor,ayarlar:vAyar};
   let out;
   if(r.startsWith("cari-")) out=vCariDetay(r.slice(5));
   else if(r.startsWith("hesap-")) out=vHesapDetay(r.slice(6));
@@ -3805,7 +3806,7 @@ function tkAySeciciBagla(on,ay,degis){ $("#"+on+"_onc").addEventListener("click"
 const sonrakiAySonu = d => iso(new Date(+d.slice(0,4),+d.slice(5,7)+1,0));
 // SKY Mali Müşavirlik'te e-posta modülü ayarlanmamışsa açık gelir; diğer firmalarda kapalı
 const skyFirma = () => { const u=(S.ayar?.firma?.unvan||"").toLocaleUpperCase("tr"); return /\bSKY\b/.test(u)&&/MÜŞAV|MUSAV/.test(u); };
-const MODUL_VARS={ekstreMail:()=>skyFirma(),tahakkukMail:()=>skyFirma(),mukellefBilgi:()=>skyFirma()};
+const MODUL_VARS={ekstreMail:()=>skyFirma(),tahakkukMail:()=>skyFirma(),mukellefBilgi:()=>skyFirma(),kkLuca:()=>skyFirma()};
 const modulAcik = ad => { const v=S.ayar?.moduller?.[ad]; return v===undefined?!!MODUL_VARS[ad]?.():!!v; };
 const TK_TIP={gelir:{fat:"satis",dek:"alacak_dekont",ad:"Gelir",cari:"Müşteri",tipler:["musteri","ikisi"],ctip:"musteri"},gider:{fat:"alis",dek:"borc_dekont",ad:"Gider",cari:"Tedarikçi",tipler:["tedarikci","ikisi"],ctip:"tedarikci"}};
 const tkTipOf = h => (h.tur==="alis"||h.tur==="borc_dekont")?"gider":"gelir";
@@ -4166,8 +4167,211 @@ function modulPanel(){
     <span><b>Tahakkuk gönderimi (Drive › e-posta)</b><br><span class="small muted">Mükelleflerin Google Drive klasöründeki beyanname tahakkuklarını ve SGK hizmet listelerini seçilen dönem için bulur, müşteriye e-postayla gönderir. Mali müşavirlik bürosu için.</span></span></label>
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="mukellefBilgi" ${modulAcik("mukellefBilgi")?"checked":""} style="margin-top:3px">
     <span><b>Mükellef bilgileri (Raporlar)</b><br><span class="small muted">Müşterilerin vergi, iletişim, mali mühür, e-imza, genel kurul, ortaklar, SGK ve sözleşme bilgilerini tek tabloda tutar; bitiş tarihlerini iş planına hatırlatma olarak aktarır.</span></span></label>
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="kkLuca" ${modulAcik("kkLuca")?"checked":""} style="margin-top:3px">
+    <span><b>Kredi kartı ekstresi › LUCA fişi</b><br><span class="small muted">Mükelleflerin banka kredi kartı ekstresi PDF'ini okur; her harcamayı cari hesaba borç, kredi kartı hesabına alacak yazan LUCA fiş aktarım Excel'ini hazırlar. Hesap kodları ve LUCA cari listesi mükellef bazında saklanır. Mali müşavirlik bürosu için.</span></span></label>
   </div></section>`;
 }
+
+
+/* ---------- KREDİ KARTI EKSTRESİ › LUCA FİŞİ (Ek modül: kkLuca; mali müşavirlik bürosu) ----------
+   Banka kredi kartı ekstresinin PDF'ini okur; her harcamayı cari hesaba borç, kredi kartı hesabına alacak
+   yazan LUCA "Fiş Aktarım Şablon" Excel'ini üretir. Hesap kodları ve LUCA cari listesi mükellef bazında
+   S.data.ayar.kkLuca.firmalar[anahtar] içinde (şifreli firma dosyasında) saklanır. PDF okuyucu (pdf.js)
+   vendor/ klasöründen yalnızca bu sayfa açıldığında yüklenir. */
+const KK={stmts:[],aktif:"",mesaj:[],pdf:null};
+const KK_GENEL=new Set("GIDA SAN SANAYI SANAYII TIC TICARET LTD STI LIMITED SIRKETI SIRKET AS A S VE PAZ PAZARLAMA INS INSAAT TUR TURZ TURIZM UR URUN URUNLERI URETIM DIS IC MAD MALZ MALZEMELERI PETROL AKARYAKIT ISTANBUL TR TU M DAG DAGITIM EGT NAK TEKS HIZMETLERI HIZMET ANONIM GRUP IHR ITH TOP MAL MALLARI KAVACIK OTOMOTIV MUHENDISLIK".split(" "));
+const KK_AYLAR={ocak:1,şubat:2,mart:3,nisan:4,mayıs:5,haziran:6,temmuz:7,ağustos:8,eylül:9,ekim:10,kasım:11,aralık:12};
+const KK_KURAL=[[/[ÇC]INAR ET/,"ÇINAR ET"],[/PAPO[ĞG]LU/,"PAPOĞLU GIDA"],[/UMUT T[ÜU]KET/,"UMUT TÜKETİM MALLARI"],[/\bB[İI]M\b|B[İI]M A\.?S|B[İI]M J|B[İI]M AS/,"BİM"],
+  [/ESRA [ÖO]KS[ÜU]Z/,"ESRA ÖKSÜZ UKKASE GIDA"],[/HASAN YAVUZ/,"HASAN YAVUZ"],[/[ÖO]ZKAR/,"ÖZKAR TATLICILIK"],[/SERHAT TES/,"SERHAT TESİSAT"],
+  [/TEK1/,"TEK1 MODERN YAPI MARKET"],[/[ŞS]AH[İI]N GIDA/,"ŞAHİN GIDA"],[/BY CHEF/,"BY CHEF MİTOLİ"],[/ADAR ENERJ/,"OPET ADAR ENERJİ (akaryakıt)"],
+  [/ACAR TARIM/,"ACAR TARIM"],[/OTOYOL/,"GÜVEN ELİF OTOYOL"],[/D[ÖO]RTYOL ECZANE/,"DÖRTYOL ECZANESİ"],[/AL[İI] Y[ÜU]CEL/,"ALİ YÜCEL GÜRER"],
+  [/TEKNOPO/,"TEKNOPOİNT"],[/PLASGEN/,"PLASGEN AMBALAJ"],[/SEYHANLAR/,"SEYHANLAR GIDA"],[/KA[İI]ZEN/,"KAİZEN HİJYEN"],[/MOPA[ŞS]/,"MOPAŞ"],
+  [/YILDIZ [İI]STANBUL/,"YILDIZ İSTANBUL GIDA"],[/G[ÜU]ZELCE/,"YENİ GÜZELCE KURUYEMİŞ"],[/ES[İI]N B[ÜU]RO/,"ESİN BÜRO KIRTASİYE"],[/D[İI]LEK GIDA/,"DİLEK GIDA"],
+  [/TRENDYOL/,"TRENDYOL"],[/S[ÜU]TL[ÜU]CE/,"SÜTLÜCE KADAYIF"],[/[ÖO]ZMERT/,"ÖZMERT PAZARLAMA"],[/SHELL KAVACIK/,"SHELL KAVACIK (akaryakıt)"],
+  [/ - [İI]SK[İI]/,"İSKİ"],[/[İI]GDA[ŞS]/,"İGDAŞ"],[/ENERJ[İI]SA/,"ENERJİSA"],[/ASO PETROL/,"ASO PETROL (akaryakıt)"],[/[ÇC]ALIK TEM/,"ÇALIK TEMİZLİK AMBALAJ"],
+  [/BAYRAMO/,"BAYRAMOĞLU DÖNER"],[/ESMA YILANCI/,"ESMA YILANCI"],[/DONDO/,"DONDO MARMARA"],[/MNG KARGO/,"MNG KARGO"]];
+const kkAMT=/^[+-]?\d{1,3}(,\d{3})*\.\d{2}$/;
+const kkNum=s=>parseFloat(String(s).replace(/[,+]/g,""));
+const kkFold=s=>{ const m={"Ç":"C","Ğ":"G","İ":"I","Ö":"O","Ş":"S","Ü":"U","ç":"c","ğ":"g","ı":"i","ö":"o","ş":"s","ü":"u"};
+  return String(s||"").replace(/[ÇĞİÖŞÜçğıöşü]/g,c=>m[c]).toUpperCase().replace(/\(.*?\)/g," ").replace(/[^A-Z0-9]+/g," ").trim(); };
+const kkKey=f=>kkFold(f).replace(/ /g,"-").slice(0,80)||"FIRMA";
+const kkTok=s=>kkFold(s).split(" ").filter(t=>t.length>=3&&!KK_GENEL.has(t));
+const kkTokU=s=>String(s).replace(/\(.*?\)/g," ").split(/[\s\-]+/).map(w=>({t:kkFold(w).replace(/ /g,""),abbr:/\.$/.test(w)})).filter(o=>o.t.length>=3&&!KK_GENEL.has(o.t));
+const kkSerial=s=>{ const [d,mo,y]=s.split("/").map(Number); return (Date.UTC(y,mo-1,d)-Date.UTC(1899,11,30))/864e5; };
+function kkCari(desc){ for(const [rx,n] of KK_KURAL) if(rx.test(desc)) return n; return desc.replace(/\s*[İI]STANBUL\s+T[RU]\s*$/,"").trim(); }
+function kkListe(txt){ const out=[]; String(txt||"").split(/\r?\n/).forEach(l=>{ const x=l.match(/^\s*(\d{3}(?:[.\-]\d+)+)\s+(.+?)\s*$/); if(x) out.push({kod:x[1],unvan:x[2]}); }); return out; }
+function kkEslestir(cari,liste){
+  const a=kkTok(cari); if(!a.length||!liste.length) return null; let best=null;
+  for(const c of liste){ const b=kkTokU(c.unvan); if(!b.length) continue;
+    const hit=t=>b.some(({t:u,abbr})=>u===t||(t.length>=4&&u.length>=4&&(u.startsWith(t)||t.startsWith(u)))||(abbr&&t.startsWith(u)));
+    const n=a.filter(hit).length; if(!n) continue;
+    const s={...c,skor:n/a.length,ilk:hit(a[0])}; s.guclu=s.ilk&&s.skor>=0.66;
+    if(!best||s.skor+(s.ilk?.01:0)>best.skor+(best.ilk?.01:0)) best=s; }
+  return best;
+}
+function kkSatirlar(items){
+  const rows=[];
+  items.filter(i=>i.str.trim()).forEach(i=>{ let r=rows.find(r=>r.page===i.page&&Math.abs(r.y-i.y)<2.5); if(!r){ r={page:i.page,y:i.y,items:[]}; rows.push(r); } r.items.push(i); });
+  rows.sort((a,b)=>a.page-b.page||b.y-a.y); rows.forEach(r=>r.items.sort((a,b)=>a.x-b.x));
+  return rows.map(r=>r.items.map(i=>i.str.trim()).filter(Boolean));
+}
+function kkEkstre(lines){
+  const head={kart:"",kesim:"",toplam:null,firma:"",donemHarc:null}; const flat=lines.map(t=>t.join("  "));
+  for(let i=0;i<flat.length;i++){ const L=flat[i]; let x;
+    if(!head.kart&&(x=L.match(/Kart Numarası\s+(\S+)/))) head.kart=x[1];
+    if(!head.kesim&&(x=L.match(/Hesap Kesim Tarihi\s+(\d{1,2} \S+ \d{4})/))) head.kesim=x[1];
+    if(head.toplam===null&&(x=L.match(/Toplam Borç Tutarı\s+([\d,]+\.\d{2})/))) head.toplam=kkNum(x[1]);
+    if(!head.firma&&(x=L.match(/Sayın;\s*(.+)/))) head.firma=x[1].trim();
+    if(head.donemHarc===null&&/Önceki Bakiye/.test(L)&&/Dönem Harcamaları/.test(L))
+      for(let j=i+1;j<Math.min(i+4,lines.length);j++){ const a=lines[j].filter(s=>kkAMT.test(s.replace(/^\+/,""))); if(a.length>=2){ head.donemHarc=kkNum(a[1]); break; } }
+  }
+  const rows=[]; let ek=null;
+  for(const t of lines){ const L=t.join(" ");
+    const e=L.match(/(\d{4}\*+\d{4}) EK KART NO'LU (.+?) HARCAMALARI/); if(e){ ek=e[1]+" "+e[2].trim(); continue; }
+    if(!/^\d{2}\/\d{2}\/\d{4}$/.test(t[0])||t.length<3) continue;
+    const son=t[t.length-1]; if(!kkAMT.test(son)) continue;
+    const desc=t.slice(1,-1).filter(s=>!kkAMT.test(s)).join(" ").replace(/\s+/g," ").trim();
+    if(/ÖDEME|ODEME/i.test(desc)&&son.startsWith("+")) continue;
+    rows.push({tarih:t[0],aciklama:desc,tutar:kkNum(son),iade:/^[+-]/.test(son),kart:ek||head.kart});
+  }
+  return {head,rows};
+}
+async function kkPdfOku(file){
+  if(!KK.pdf){ KK.pdf=await import(new URL("vendor/pdf.min.mjs",location.href).href); KK.pdf.GlobalWorkerOptions.workerSrc=new URL("vendor/pdf.worker.min.mjs",location.href).href; }
+  const doc=await KK.pdf.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise; const items=[];
+  for(let p=1;p<=doc.numPages;p++){ const tc=await (await doc.getPage(p)).getTextContent(); tc.items.forEach(i=>items.push({str:i.str,x:i.transform[4],y:i.transform[5],page:p})); }
+  return kkEkstre(kkSatirlar(items));
+}
+const KK_VARS={kkKod:"",banka:"TÜRKİYE FİNANS KREDİ KARTI",belge:"BK",ilkFis:1,duzen:"gun",kodlar:{},otomatik:{},cariListe:""};
+function kkAyar(){ const a=S.data.ayar||(S.data.ayar={}); return a.kkLuca||(a.kkLuca={firmalar:{}}); }
+function kkCfg(key){ const F=kkAyar().firmalar; if(!F[key]) F[key]={...clone(KK_VARS)}; const c=F[key]; for(const k in KK_VARS) if(c[k]===undefined) c[k]=clone(KK_VARS[k]); return c; }
+const kkAktifStmts=()=>KK.stmts.filter(s=>s.key===KK.aktif);
+function kkTum(){ const out=[]; kkAktifStmts().forEach(st=>st.rows.forEach(r=>out.push({...r,cari:kkCari(r.aciklama)}))); return out; }
+function kkOto(c){ const L=kkListe(c.cariListe); if(!L.length) return 0; let n=0;
+  new Set(kkTum().map(r=>r.cari)).forEach(x=>{ if((c.kodlar[x]||"").trim()) return; const e=kkEslestir(x,L); if(e&&e.guclu){ c.kodlar[x]=e.kod; c.otomatik[x]=true; n++; } }); return n; }
+function kkFisler(c){
+  const L=[]; let no=Math.max(1,parseInt(c.ilkFis)||1), son=null;
+  kkTum().forEach((r,i)=>{ let f; if(c.duzen==="gun"){ if(son!==null&&r.tarih!==son) no++; f=no; son=r.tarih; } else f=no+i;
+    const kod=(c.kodlar[r.cari]||"").trim(), kk=(c.kkKod||"").trim();
+    const a={f,t:r.tarih,fa:(r.tarih+" "+(c.banka||"").trim()).trim(),d:r.cari+" - "+r.tarih+(r.iade?" KK İADE":" KK HARCAMA"),b:(c.belge||"").trim()};
+    if(!r.iade){ L.push({...a,h:kod,bo:r.tutar,al:0}); L.push({...a,h:kk,bo:0,al:r.tutar}); }
+    else{ L.push({...a,h:kk,bo:r.tutar,al:0}); L.push({...a,h:kod,bo:0,al:r.tutar}); } });
+  return L;
+}
+function kkExcel(c,ad){
+  const H=["Fiş No","Fiş Tarihi","Fiş Açıklama","Hesap Kodu","Evrak No","Evrak Tarihi","Detay Açıklama","Borç","Alacak","Miktar","Belge Türü","Para Birimi","Kur","Döviz Tutar","TC/Vergi No"];
+  const cs=(r,ci,v,st)=>`<c r="${colL(ci)}${r}" t="inlineStr" s="${st}"><is><t xml:space="preserve">${xe(v)}</t></is></c>`, cn=(r,ci,v,st)=>`<c r="${colL(ci)}${r}" s="${st}"><v>${v}</v></c>`;
+  let rows=`<row r="1">${H.map((h,i)=>cs(1,i,h,4)).join("")}</row>`;
+  kkFisler(c).forEach((l,k)=>{ const r=k+2; rows+=`<row r="${r}">`+cs(r,0,String(l.f),3)+cn(r,1,kkSerial(l.t),1)+cs(r,2,l.fa,3)+cs(r,3,l.h,3)+cn(r,5,kkSerial(l.t),1)+cs(r,6,l.d,3)+cn(r,7,l.bo,2)+cn(r,8,l.al,2)+(l.b?cs(r,10,l.b,3):"")+"</row>"; });
+  const w=[8,12,40,14,10,12,46,14,14,10,10,10,10,12,14].map((v,i)=>`<col min="${i+1}" max="${i+1}" width="${v}" customWidth="1"/>`).join("");
+  const M="http://schemas.openxmlformats.org/spreadsheetml/2006/main", R="http://schemas.openxmlformats.org/officeDocument/2006/relationships", X='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  saveFile(ad,zipStore([
+    {name:"[Content_Types].xml",data:`${X}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`},
+    {name:"_rels/.rels",data:`${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:"xl/workbook.xml",data:`${X}<workbook xmlns="${M}" xmlns:r="${R}"><sheets><sheet name="Fiş Aktarım Şablon" sheetId="1" r:id="rId1"/></sheets></workbook>`},
+    {name:"xl/_rels/workbook.xml.rels",data:`${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${R}/styles" Target="styles.xml"/></Relationships>`},
+    {name:"xl/styles.xml",data:`${X}<styleSheet xmlns="${M}"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts><fonts count="2"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><name val="Arial"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`},
+    {name:"xl/worksheets/sheet1.xml",data:`${X}<worksheet xmlns="${M}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${w}</cols><sheetData>${rows}</sheetData></worksheet>`}
+  ]));
+}
+async function kkDosyalar(files){
+  const msg=[];
+  for(const f of files){
+    if(!/\.pdf$/i.test(f.name)&&f.type!=="application/pdf"){ msg.push(["bad",f.name+": PDF değil, atlandı."]); continue; }
+    let st; try{ st=await kkPdfOku(f); }catch(e){ msg.push(["bad",f.name+": PDF açılamadı ("+(e.message||e)+")."]); continue; }
+    if(!st.rows.length||!st.head.kesim){ msg.push(["bad",f.name+": Ekstre satırı bulunamadı. Bu bankanın ekstre düzeni henüz tanınmıyor olabilir."]); continue; }
+    st.key=kkKey(st.head.firma); st.file=f.name;
+    if(KK.stmts.some(s=>s.head.kart===st.head.kart&&s.head.kesim===st.head.kesim)){ msg.push(["warn",f.name+": "+st.head.kesim+" ekstresi zaten yüklü, tekrar sayılmadı."]); continue; }
+    const [g,a,y]=st.head.kesim.split(" "); st.sira=+y*10000+(KK_AYLAR[a.toLocaleLowerCase("tr")]||0)*100+(+g);
+    KK.stmts.push(st); KK.aktif=st.key;
+    msg.push(["ok",`${f.name}: ${st.head.firma} · ${st.head.kesim} kesimli ekstre, ${st.rows.length} satır okundu.`]);
+  }
+  KK.stmts.sort((a,b)=>a.sira-b.sira); KK.mesaj=msg;
+  if(KK.aktif&&S.canWrite){ const c=kkCfg(KK.aktif); c.firma=kkAktifStmts()[0]?.head.firma||c.firma; kkOto(c); scheduleSave(); }
+  const y=window.scrollY; render(); window.scrollTo(0,y);
+}
+function vKkLuca(){
+  if(!modulAcik("kkLuca")) return {title:"Kredi kartı › LUCA",btns:" ",html:`<div class="notice">Bu modül bu firmada kapalı. Ayarlar › Ek modüller'den açabilirsiniz.</div>`};
+  const firmalar=[...new Set(KK.stmts.map(s=>s.key))];
+  if(!firmalar.includes(KK.aktif)) KK.aktif=firmalar[0]||"";
+  const stl=kkAktifStmts(), ro=S.canWrite?"":"disabled";
+  const yukle=`<section class="panel"><header><h2>1 · Ekstreleri yükleyin</h2><span class="small muted">PDF dosyalarını seçin ya da bu alana sürükleyin; birden fazla ay ve mükellef birlikte verilebilir</span></header><div class="pad" style="display:flex;flex-direction:column;gap:10px">
+    <div id="kkDrop" tabindex="0" role="button" style="border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;cursor:pointer"><b>PDF ekstreleri buraya sürükleyin</b> ya da tıklayıp seçin<div class="small muted">Şu an Türkiye Finans kredi kartı ekstre düzeni tanınıyor. Aynı ekstre iki kez verilirse bir kez sayılır.</div></div>
+    <input type="file" id="kkFile" accept="application/pdf,.pdf" multiple hidden>
+    ${KK.mesaj.map(([k,t])=>`<div class="small" style="color:${k==="bad"?"var(--borc)":k==="warn"?"#a15c00":"var(--alacak)"}">${esc(t)}</div>`).join("")}
+  </div></section>`;
+  if(!stl.length) return {title:`Kredi kartı › LUCA<span class="sub">Ekstreden LUCA fiş aktarımı</span>`,btns:" ",html:yukle,after:kkAfter};
+  const c=kkCfg(KK.aktif), liste=kkListe(c.cariListe), LM=new Map(liste.map(x=>[x.kod,x.unvan])), muht=liste.find(x=>/MUHTEL[İI]F/i.test(x.unvan));
+  const firmaSec=firmalar.length>1?`<label>Mükellef<select id="kkFirma">${firmalar.map(k=>`<option value="${esc(k)}" ${k===KK.aktif?"selected":""}>${esc(KK.stmts.find(s=>s.key===k).head.firma)}</option>`).join("")}</select></label>`:"";
+  const donem=stl.map(st=>{ const top=r2(st.rows.reduce((t,r)=>t+(r.iade?-r.tutar:r.tutar),0)), ref=st.head.donemHarc??st.head.toplam, ok=ref!=null&&Math.abs(top-ref)<0.005;
+    return `<tr><td>${esc(st.head.kesim)}<div class="small muted">${esc(st.file)}</div></td><td class="r amt">${st.rows.length}</td><td class="r amt">${m(top)}</td><td class="r amt">${ref==null?"—":m(ref)}</td><td>${ok?`<span class="pill" style="color:var(--alacak)">Tutuyor</span>`:`<span class="pill" style="color:var(--borc)">Fark: ${m(r2((ref||0)-top))}</span>`}</td></tr>`; }).join("");
+  const agg=new Map(); kkTum().forEach(r=>{ const g=agg.get(r.cari)||{n:0,t:0,o:new Set()}; g.n++; g.t+=r.iade?-r.tutar:r.tutar; g.o.add(r.aciklama); agg.set(r.cari,g); });
+  const cl=[...agg.entries()].map(([ad,g])=>({ad,...g,kod:(c.kodlar[ad]||"").trim()})).sort((x,y)=>(!!x.kod-!!y.kod)||y.t-x.t);
+  const eksik=cl.filter(x=>!x.kod).length, kkYok=!(c.kkKod||"").trim();
+  const L=kkFisler(c), fisSay=new Set(L.map(l=>l.f)).size, tb=r2(L.reduce((t,l)=>t+l.bo,0));
+  const uvHtml=x=>{ if(x.kod){ const u=LM.get(x.kod); return `${u?esc(u):liste.length?`<span style="color:var(--borc)">Listede yok</span>`:""}${c.otomatik[x.ad]?` <span class="pill">otomatik</span>`:""}`; }
+    const e=kkEslestir(x.ad,liste); return e?`<button class="btn sm" data-kkoner="${esc(x.ad)}" data-kod="${esc(e.kod)}" ${ro}>Öneri: ${esc(e.kod)} ${esc(e.unvan)}</button>`:liste.length?`<span class="muted">Listede benzer cari yok</span>`:""; };
+  const html=yukle+`
+  <section class="panel"><header><h2>2 · Mükellef ve kontrol</h2><span class="small muted">${esc(stl[0].head.firma)} · Kart ${esc(stl[0].head.kart)}</span></header><div class="pad" style="display:flex;flex-direction:column;gap:12px">
+    ${firmaSec?`<div class="filters">${firmaSec}</div>`:""}
+    <div class="tw"><table><thead><tr><th>Ekstre (hesap kesim)</th><th class="r amt">İşlem</th><th class="r amt">Okunan toplam</th><th class="r amt">Ekstredeki dönem harcaması</th><th>Kontrol</th></tr></thead><tbody>${donem}</tbody></table></div>
+    <div class="filters">
+      <label>Kredi kartı hesap kodu (alacak)<input type="text" id="kk_kk" class="mono" value="${esc(c.kkKod)}" placeholder="309.01.002" ${ro}></label>
+      <label>Fiş açıklaması (tarihten sonra)<input type="text" id="kk_banka" value="${esc(c.banka)}" placeholder="TÜRKİYE FİNANS KREDİ KARTI" ${ro}></label>
+      <label>Belge türü<input type="text" id="kk_belge" class="mono" value="${esc(c.belge)}" placeholder="BK" style="width:80px" ${ro}></label>
+      <label>İlk fiş no<input type="number" id="kk_ilk" min="1" value="${esc(c.ilkFis)}" style="width:90px" ${ro}></label>
+      <label>Fiş düzeni<select id="kk_duzen" ${ro}><option value="gun" ${c.duzen==="gun"?"selected":""}>Aynı günün harcamaları tek fiş</option><option value="islem" ${c.duzen==="islem"?"selected":""}>Her harcama ayrı fiş</option></select></label>
+    </div>
+    <details ${liste.length?"":"open"}><summary><b>LUCA cari listesi</b> <span class="small muted">· ${liste.length?liste.length+" cari yüklü":"henüz yüklenmedi"}</span></summary>
+      <div class="small muted" style="margin:8px 0">LUCA'daki 320 cari listesini (kod ve ünvan) kopyalayıp yapıştırın; ekstredeki satıcılar bu listeyle otomatik eşleşir. Liste bu mükellef için saklanır.</div>
+      <textarea id="kk_liste" rows="7" spellcheck="false" class="mono" style="width:100%;font-size:12.5px" placeholder="320.01.002&#9;UMUT TÜK. MAL. SAN. PAZ. LTD. ŞTİ." ${ro}>${esc(c.cariListe)}</textarea></details>
+  </div></section>
+  <section class="panel"><header><h2>3 · Hesap kodları</h2><span class="small muted">${eksik?`<b style="color:var(--borc)">${eksik} carinin kodu eksik</b>`:`Tüm cari kodları tamam (${cl.length})`}</span></header><div class="pad" style="display:flex;flex-direction:column;gap:10px">
+    ${S.canWrite?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="kkYedekYukle" title="Ayrı Kredi Kartı › LUCA sayfasından alınan .json kod yedeği">Kod yedeğini yükle (.json)</button><input type="file" id="kkYedek" accept=".json,application/json" hidden></div>`:""}
+    ${muht&&eksik&&S.canWrite?`<div><button class="btn sm" data-act="kkMuhtelif">Kalan ${eksik} cariye ${esc(muht.kod)} (${esc(muht.unvan)}) ver</button></div>`:""}
+    <datalist id="kkKodlar">${liste.map(x=>`<option value="${esc(x.kod)}" label="${esc(x.unvan)}">`).join("")}</datalist>
+    <div class="tw" style="max-height:520px;overflow:auto"><table><thead><tr><th>Cari / satıcı</th><th class="r amt">İşlem</th><th class="r amt">Tutar</th><th>LUCA hesap kodu</th><th>LUCA'daki carisi</th></tr></thead><tbody>
+      ${cl.map(x=>`<tr${x.kod?"":` style="background:#fff7e0"`}><td><b>${esc(x.ad)}</b><div class="small muted">${esc([...x.o].slice(0,2).join(" · "))}</div></td><td class="r amt">${x.n}</td><td class="r amt">${m(r2(x.t))}</td>
+        <td><input type="text" class="mono" list="kkKodlar" data-kkkod="${esc(x.ad)}" value="${esc(x.kod)}" placeholder="320.01.___" style="width:130px" ${ro}></td><td class="small" data-kkuv="${esc(x.ad)}">${uvHtml(x)}</td></tr>`).join("")}
+    </tbody></table></div></div></section>
+  <section class="panel"><header><h2>4 · LUCA fişini indirin</h2></header><div class="pad" style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn pri" data-act="kkIndir" ${eksik||kkYok?"disabled":""}>LUCA aktarım dosyasını indir (.xlsx)</button>
+    <span class="small muted">${kkTum().length} harcama · ${L.length} fiş satırı · ${fisSay} fiş · Borç = Alacak = ${m(tb)} ₺</span></div>
+    ${kkYok?`<div class="small" style="color:var(--borc)">İndirmek için 2. adımda kredi kartı hesap kodunu girin.</div>`:eksik?`<div class="small" style="color:var(--borc)">İndirmek için 3. adımda sarı satırlardaki ${eksik} cariye hesap kodu girin.</div>`:""}
+  </div></section>`;
+  return {title:`Kredi kartı › LUCA<span class="sub">${esc(stl[0].head.firma)}</span>`,btns:`<button class="btn" data-act="kkTemizle">Ekstreleri kapat</button>`,html,after:kkAfter};
+}
+function kkAfter(){
+  const yenile=()=>{ const y=window.scrollY; render(); window.scrollTo(0,y); };
+  const dr=$("#kkDrop"), fi=$("#kkFile");
+  dr.addEventListener("click",()=>fi.click()); dr.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); fi.click(); } });
+  ["dragenter","dragover"].forEach(t=>dr.addEventListener(t,e=>{ e.preventDefault(); dr.style.borderColor="var(--accent,#2a7aa0)"; }));
+  ["dragleave","drop"].forEach(t=>dr.addEventListener(t,e=>{ e.preventDefault(); dr.style.borderColor=""; }));
+  dr.addEventListener("drop",e=>{ dr.querySelector("b").textContent="Okunuyor…"; kkDosyalar([...e.dataTransfer.files]); });
+  fi.addEventListener("change",()=>{ dr.querySelector("b").textContent="Okunuyor…"; kkDosyalar([...fi.files]); });
+  if(!KK.aktif) return;
+  const c=kkCfg(KK.aktif);
+  $("#kkFirma")?.addEventListener("change",e=>{ KK.aktif=e.target.value; yenile(); });
+  if(!S.canWrite) return;
+  const alan=(id,k,f=v=>v)=>$(id)?.addEventListener("change",e=>{ c[k]=f(e.target.value); scheduleSave(); yenile(); });
+  alan("#kk_kk","kkKod",v=>v.trim()); alan("#kk_banka","banka"); alan("#kk_belge","belge",v=>v.trim()); alan("#kk_ilk","ilkFis",v=>Math.max(1,parseInt(v)||1)); alan("#kk_duzen","duzen");
+  $("#kk_liste")?.addEventListener("change",e=>{ c.cariListe=e.target.value; const n=kkOto(c); scheduleSave(); if(n) toast(n+" cari LUCA listesiyle otomatik eşleşti"); yenile(); });
+  document.querySelectorAll("[data-kkkod]").forEach(inp=>inp.addEventListener("change",()=>{ const ad=inp.dataset.kkkod, v=inp.value.trim();
+    if(v) c.kodlar[ad]=v; else delete c.kodlar[ad]; delete c.otomatik[ad]; scheduleSave(); yenile(); }));
+  $("#kkYedek")?.addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; let j; try{ j=JSON.parse(await f.text()); }catch{ return toast("Yedek dosyası okunamadı."); }
+    for(const k of ["kkKod","banka","belge","ilkFis","duzen"]) if(j[k]!==undefined&&j[k]!=="") c[k]=j[k];
+    if(j.cariListe) c.cariListe=j.cariListe; c.kodlar={...c.kodlar,...(j.kodlar||{})}; c.otomatik={...c.otomatik,...(j.otomatik||{})};
+    const n=kkOto(c); scheduleSave(); toast(Object.keys(j.kodlar||{}).length+" kod yedekten yüklendi"+(n?", "+n+" cari otomatik eşleşti":"")); yenile(); });
+  document.querySelectorAll("[data-kkoner]").forEach(b=>b.addEventListener("click",()=>{ c.kodlar[b.dataset.kkoner]=b.dataset.kod; delete c.otomatik[b.dataset.kkoner]; scheduleSave(); yenile(); }));
+}
+Object.assign(ACT,{
+  kkIndir(){ const c=kkCfg(KK.aktif), st=kkAktifStmts(); const ay=[...new Set(st.map(s=>{ const [,a,y]=s.head.kesim.split(" "); return pad(KK_AYLAR[a.toLocaleLowerCase("tr")]||0)+"-"+y; }))];
+    kkExcel(c,`${fn(st[0].head.firma.split(/\s+/).slice(0,2).join(" "))}_KK_${ay.join("_")}_LUCA.xlsx`); },
+  kkMuhtelif(){ if(!S.canWrite) return; const c=kkCfg(KK.aktif), mu=kkListe(c.cariListe).find(x=>/MUHTEL[İI]F/i.test(x.unvan)); if(!mu) return;
+    new Set(kkTum().map(r=>r.cari)).forEach(x=>{ if(!(c.kodlar[x]||"").trim()) c.kodlar[x]=mu.kod; }); scheduleSave(); const y=window.scrollY; render(); window.scrollTo(0,y); },
+  kkYedekYukle(){ $("#kkYedek")?.click(); },
+  kkTemizle(){ KK.stmts=[]; KK.aktif=""; KK.mesaj=[]; render(); }
+});
 
 /* ---------- hızlı kayıt ekranı ---------- */
 function islemCiz(opt,baslik,govde,alt){
@@ -4467,7 +4671,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.15.0-önizleme";
+const SURUM="1.16.0-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
