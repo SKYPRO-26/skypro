@@ -1178,9 +1178,9 @@ function vCariDetay(id){
   </div></header>
   ${secCubukYer()}<div class="tw"><table><thead><tr>${secTh(e.rows.map(r=>r.h.id))}<th>Tarih</th><th>Belge no</th><th>İşlem</th><th>Açıklama</th><th>Vade</th><th class="r">Borç</th><th class="r">Alacak</th><th class="r">Bakiye</th></tr>
   ${ekstreFiltreSatir(f.flt,tumRows,fAktif,tumSatir,e.rows.length)}</thead><tbody>
-  ${f.bas?`<tr><td class="secTd" data-w></td><td class="mono small">${trDate(f.bas)}</td><td></td><td colspan="5" class="muted">Devreden bakiye</td><td class="r">${bal(e.devir,c.doviz)}</td></tr>`:""}
-  ${e.rows.map(r=>`<tr class="click${S.sec.has(r.h.id)?" secili":""}" data-act="islemEdit" data-id="${r.h.id}">${secTd(r.h.id)}<td class="mono small">${trDate(r.h.tarih)}</td><td class="small">${esc(r.h.belgeNo||"")}</td><td>${TUR[r.h.tur]}${exTag(r.h)}</td><td class="small muted">${esc(hAciklama(r.h))}</td><td class="mono small">${r.h.vade?trDate(r.h.vade):""}</td><td class="r">${r.b?amt(r.b,c.doviz):""}</td><td class="r">${r.a?amt(r.a,c.doviz):""}</td><td class="r">${bal(r.bak,c.doviz)}</td></tr>`).join("")}
+  ${[...e.rows].reverse().map(r=>`<tr class="click${S.sec.has(r.h.id)?" secili":""}" data-act="islemEdit" data-id="${r.h.id}">${secTd(r.h.id)}<td class="mono small">${trDate(r.h.tarih)}</td><td class="small">${esc(r.h.belgeNo||"")}</td><td>${TUR[r.h.tur]}${exTag(r.h)}</td><td class="small muted">${esc(hAciklama(r.h))}</td><td class="mono small">${r.h.vade?trDate(r.h.vade):""}</td><td class="r">${r.b?amt(r.b,c.doviz):""}</td><td class="r">${r.a?amt(r.a,c.doviz):""}</td><td class="r">${bal(r.bak,c.doviz)}</td></tr>`).join("")}
   ${!e.rows.length?`<tr><td colspan="9" class="empty">${fAktif?"Filtrelere uyan hareket yok.":"Bu aralıkta hareket yok."}</td></tr>`:""}
+  ${f.bas?`<tr><td class="secTd" data-w></td><td class="mono small">${trDate(f.bas)}</td><td></td><td colspan="5" class="muted">Devreden bakiye</td><td class="r">${bal(e.devir,c.doviz)}</td></tr>`:""}
   </tbody><tfoot><tr><td class="secTd" data-w></td><td colspan="5">${fAktif?`Filtrelenen ${e.rows.length} kayıt toplamı`:"Toplam"}</td><td class="r amt">${m(e.rows.reduce((s,r)=>s+r.b,0))}</td><td class="r amt">${m(e.rows.reduce((s,r)=>s+r.a,0))}</td><td class="r">${fAktif?`<span class="small muted" title="Filtrelenen borç − alacak">fark ${bal(r2(e.rows.reduce((s,r)=>s+r.b-r.a,0)),c.doviz)}</span>`:bal(e.son,c.doviz)}</td></tr></tfoot></table></div></section>
   ${cekler.length?`<section class="panel"><header><h2>Bu cariye ait çek ve senetler</h2></header><div class="tw"><table><thead><tr><th>Vade</th><th>Tür</th><th>No</th><th>Banka</th><th class="r">Tutar</th><th>Durum</th></tr></thead><tbody>
   ${cekler.map(k=>`<tr class="click" data-act="cekAct" data-id="${k.id}"><td class="mono small">${trDate(k.vade)}</td><td>${k.tur==="senet"?"Senet":"Çek"} · ${k.yon==="alinan"?"alınan":"verilen"}</td><td class="mono small">${esc(k.no)}</td><td class="small">${esc(k.banka||"")}</td><td class="r">${amt(k.tutar,k.doviz)}</td><td><span class="pill ${CDURUM_CLS[k.durum]}">${CDURUM[k.durum]}</span></td></tr>`).join("")}</tbody></table></div></section>`:""}`;
@@ -1333,8 +1333,8 @@ function vHesapDetay(id){
   </div></section>
   <section class="panel"><header><h2>Hesap hareketleri</h2><button class="btn" data-act="excelHesap" data-id="${id}">Excel'e aktar</button></header>
   <div class="tw"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Karşı taraf / açıklama</th><th class="r">Giriş</th><th class="r">Çıkış</th><th class="r">Bakiye</th></tr></thead><tbody>
+  ${[...list].reverse().map(r=>`<tr class="click" data-act="islemEdit" data-id="${r.x.id}"><td class="mono small">${trDate(r.x.tarih)}</td><td>${TUR[r.x.tur]}${exTag(r.x)}</td><td class="small">${esc(r.x.cariId?cariAd(r.x.cariId):r.x.tur==="virman"?(r.v<0?"→ "+hesapAd(r.x.hedefHesapId):"← "+hesapAd(r.x.hesapId)):(r.x.kategori||""))}<div class="muted">${esc(r.x.aciklama||"")}</div></td><td class="r">${r.v>0?amt(r.v,h.doviz):""}</td><td class="r">${r.v<0?amt(-r.v,h.doviz):""}</td><td class="r">${amt(r.bak,h.doviz)}</td></tr>`).join("")}
   <tr><td></td><td colspan="4" class="muted">Açılış bakiyesi</td><td class="r">${amt(num(h.acilis)||0,h.doviz)}</td></tr>
-  ${list.map(r=>`<tr class="click" data-act="islemEdit" data-id="${r.x.id}"><td class="mono small">${trDate(r.x.tarih)}</td><td>${TUR[r.x.tur]}${exTag(r.x)}</td><td class="small">${esc(r.x.cariId?cariAd(r.x.cariId):r.x.tur==="virman"?(r.v<0?"→ "+hesapAd(r.x.hedefHesapId):"← "+hesapAd(r.x.hesapId)):(r.x.kategori||""))}<div class="muted">${esc(r.x.aciklama||"")}</div></td><td class="r">${r.v>0?amt(r.v,h.doviz):""}</td><td class="r">${r.v<0?amt(-r.v,h.doviz):""}</td><td class="r">${amt(r.bak,h.doviz)}</td></tr>`).join("")}
   </tbody></table></div></section>`;
   return {title:`${esc(h.ad)}<span class="sub"><a href="#kasa-banka">Kasa ve banka</a></span>`,btns:`${h.tip!=="kasa"?`<button class="btn" data-act="bankaAktar" data-hesap="${id}" data-w>Excel'den ekstre al</button>`:""}<button class="btn" data-act="hesapForm" data-id="${id}" data-w>Düzenle</button><button class="btn pri" data-act="islem" data-tur="hesap_cikis" data-hesap="${id}" data-w>+ Hareket</button>`,html};
 }
@@ -4671,7 +4671,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.16.0-önizleme";
+const SURUM="1.16.1-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
