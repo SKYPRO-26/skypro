@@ -334,6 +334,15 @@ tr.secili td{background:var(--accent-soft)!important}
 <div id="guncel" hidden role="status"><span>SKYPRO'nun yeni sürümü hazır. Kayıtlarınız kaydedilir; güncellemeden sonra yeniden giriş yapmanız gerekir.</span><button type="button" id="guncelBtn">Şimdi güncelle</button></div>
 
 <script>
+/* açılış hatası yakalayıcı: program açılamazsa hatayı ekrana yazar (eski "Açılıyor…"da kalmasın) */
+(function(){ const goster=(t)=>{ const b=document.getElementById("startBody"); const st=document.getElementById("start"); if(!b||!st||st.hidden) return;
+  if(b.dataset.hata) { b.querySelector("pre").textContent+="\n"+t; return; } b.dataset.hata="1";
+  b.innerHTML='<div class="notice bad" style="max-width:640px"><b>Program açılırken bir hata oluştu.</b> Lütfen bu ekranın görüntüsünü gönderin.<pre style="white-space:pre-wrap;font-size:12px;margin:8px 0 0"></pre><div style="margin-top:10px"><button class="btn" onclick="location.reload()">Tekrar dene</button></div></div>';
+  b.querySelector("pre").textContent=t; };
+  window.addEventListener("error",e=>goster(`${e.message||e.error} (${(e.filename||"").split("/").pop()}:${e.lineno||""})`));
+  window.addEventListener("unhandledrejection",e=>goster("Promise: "+(e.reason?.stack||e.reason?.message||e.reason)));
+  setTimeout(()=>{ const b=document.getElementById("startBody"); if(b&&/Açılıyor/.test(b.textContent)&&!b.dataset.hata) goster("Açılış 15 saniyede tamamlanmadı (startScreen yanıt vermedi)."); },15000); })();
+
 "use strict";
 /* ---------- yardımcılar ---------- */
 const $ = s => document.querySelector(s);
@@ -659,7 +668,7 @@ async function startScreen(mesaj){
     <p style="margin:0">İlk kullanım: verilerin saklanacağı bir klasör seçin. Firmalar bu klasörde parolayla şifrelenmiş dosyalar olarak durur; günlük yedekler <b>yedek</b> alt klasörüne alınır.</p>
     <p class="small muted" style="margin:0">Öneri: Belgeler içinde <b>SKYPRO Veri</b> adlı yeni bir klasör açıp onu seçin.</p>
     <div><button class="btn pri" data-act="klasorSec">Veri klasörünü seç</button></div></div>`)); return; }
-  let perm="prompt"; try{ perm=await S.dir.queryPermission({mode:"readwrite"}); }catch{}
+  let perm="prompt"; try{ perm=await Promise.race([S.dir.queryPermission({mode:"readwrite"}),new Promise(r=>setTimeout(()=>r("prompt"),5000))]); }catch{}
   if(perm!=="granted"){ startShow(panel("",`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
     <p style="margin:0">Güvenlik gereği her açılışta veri klasörüne erişim izni bir kez onaylanır.</p>
     <div class="btns"><button class="btn pri" data-act="izinVer">Devam et</button><button class="btn" data-act="klasorSec">Başka klasör seç</button></div></div>`)); return; }
@@ -4701,7 +4710,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.16.5-önizleme";
+const SURUM="1.16.6-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
