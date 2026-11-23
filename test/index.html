@@ -3103,6 +3103,13 @@ function emMime({kime,cc,konu,html,dosya,pdf,ekler}){ ekler=ekler||[{dosya,veri:
     `Subject: ${mimeH(konu)}`,"MIME-Version: 1.0",`Content-Type: multipart/mixed; boundary="${sn}"`].filter(Boolean);
   return [...bas,"",`--${sn}`,"Content-Type: text/html; charset=UTF-8","Content-Transfer-Encoding: base64","",mimeSatir(b64s(html)),
     ...ekler.flatMap(e=>[`--${sn}`,`Content-Type: ${e.tip||"application/octet-stream"}; name="${mimeH(e.dosya)}"`,"Content-Transfer-Encoding: base64",`Content-Disposition: attachment; filename="${mimeH(e.dosya)}"`,"",mimeSatir(b64(e.veri))]),`--${sn}--`,""].join("\r\n"); }
+function emBorcSatir(c){ const V=emVade(c), dv=c.doviz;
+  return V.top>0?`${trDate(TODAY)} itibarıyla borç durumunuz:\nVadesi geçmiş borcunuz: ${money(V.gec,dv)}\nVadesi gelmemiş borcunuz: ${money(V.gel,dv)}\nToplam borcunuz: ${money(V.top,dv)}`
+    :`${trDate(TODAY)} itibarıyla firmamıza borcunuz bulunmamaktadır.${V.alacak>0?` Firmamızdaki alacak bakiyeniz: ${money(V.alacak,dv)}.`:""}`; }
+// şablonda {vadesiGecmis}/{toplamBorc} yoksa borç durumu "Saygılarımızla"nın üstüne eklenir
+function emMetin(sablon,v,c){ const t=emDoldur(sablon,v); if(/\{(vadesiGecmis|vadesiGelmemis|toplamBorc)\}/.test(sablon)) return t;
+  const b=emBorcSatir(c), i=t.search(/\n\s*\n\s*(Saygılarımızla|Saygılarımla|İyi çalışmalar)/i);
+  return i>=0?t.slice(0,i)+"\n\n"+b+t.slice(i):t.replace(/\s*$/,"")+"\n\n"+b; }
 function emBorcMetni(c){ const V=emVade(c), dv=c.doviz;
   if(V.top>0) return `<p style="margin:16px 0 0;padding:12px 14px;background:#f6f8f9;border-left:3px solid #1c5a78"><b>${trDate(TODAY)} itibarıyla borç durumunuz:</b><br>
     Vadesi geçmiş borcunuz: <b style="color:${V.gec>0?"#b3261e":"inherit"}">${esc(money(V.gec,dv))}</b><br>
@@ -3111,14 +3118,13 @@ function emBorcMetni(c){ const V=emVade(c), dv=c.doviz;
   return `<p style="margin:16px 0 0;padding:12px 14px;background:#f6f8f9;border-left:3px solid #1c5a78"><b>${trDate(TODAY)} itibarıyla</b> firmamıza borcunuz bulunmamaktadır.${V.alacak>0?` Firmamızdaki alacak bakiyeniz: <b>${esc(money(V.alacak,dv))}</b>.`:""}</p>`; }
 function emGovde(metin,c,son,bas){ const fm=S.ayar?.firma||{};
   return `<div style="font:14px/1.6 Arial,Helvetica,sans-serif;color:#14232b;max-width:640px">${esc(metin).replace(/\n/g,"<br>")}
-  ${emBorcMetni(c)}
   <table style="margin-top:18px;border-collapse:collapse;font-size:13px;min-width:320px"><tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Cari</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2"><b>${esc(c.unvan)}</b> (${esc(c.kod)})</td></tr>
   <tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Dönem</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2">${bas?trDate(bas):"başlangıç"} – ${trDate(TODAY)}</td></tr>
   <tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Kapanış bakiyesi</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2"><b>${esc(emBakiyeYazi(son,c.doviz))}</b></td></tr></table>
   <p style="color:#8a9aa2;font-size:11px;margin-top:20px">${esc(fm.unvan||"")}${fm.tel?" · "+esc(fm.tel):""}${fm.eposta?" · "+esc(fm.eposta):""}<br>Bu e-posta SKYPRO ön muhasebe programından gönderilmiştir. Ekstre PDF olarak ektedir.</p></div>`; }
 async function emIleti(id,A,ozel={}){ const c=S.cariler.get(id), bas=ozel.bas!==undefined?ozel.bas:emDonemBas(A.donem), e=ekstreRows(id,bas,""), v=emDegisken(c,e.son,bas);
   const pdf=await ekstrePDF(id,bas,"");
-  return {c,son:e.son,bas,kime:ozel.kime??c.eposta??"",cc:ozel.cc??A.cc,konu:ozel.konu??emDoldur(A.konu,v),html:emGovde(ozel.metin??emDoldur(A.metin,v),c,e.son,bas),dosya:`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,pdf}; }
+  return {c,son:e.son,bas,kime:ozel.kime??c.eposta??"",cc:ozel.cc??A.cc,konu:ozel.konu??emDoldur(A.konu,v),html:emGovde(ozel.metin??emMetin(A.metin,v,c),c,e.son,bas),dosya:`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,pdf}; }
 function emLog(x){ const L=S.data.ekstreMailLog||(S.data.ekstreMailLog={}); L[uid("em")]={at:new Date().toISOString(),by:S.me||null,hesap:GM.email||"",...x};
   const k=Object.keys(L); if(k.length>3000) for(const id of k.sort((a,b)=>L[a].at.localeCompare(L[b].at)).slice(0,k.length-3000)) delete L[id]; }
 async function emGonderBir(id,A,ozel,oto){ const m=await emIleti(id,A,ozel);
@@ -3137,12 +3143,12 @@ function emTekModal(id){ if(emClientId()) GM.yukle().catch(()=>{}); // Google ar
     <div class="f"><label for="em_cc">Bilgi (CC)</label><input type="text" id="em_cc" value="${esc(A.cc||"")}" placeholder="İsteğe bağlı"></div>
     <div class="f"><label for="em_d">Ekstre dönemi</label><select id="em_d">${Object.entries(EM_DONEM).map(([k,t])=>`<option value="${k}" ${A.donem===k&&!ekran?"selected":""}>${t}</option>`).join("")}${ekran?`<option value="ekran" selected>Ekrandaki aralık (${f.bas?trDate(f.bas):"başlangıç"} – ${f.bit?trDate(f.bit):"bugün"})</option>`:""}</select></div>
     <div class="f w"><label for="em_s">Konu</label><input type="text" id="em_s" value="${esc(emDoldur(A.konu,v))}" required></div>
-    <div class="f w"><label for="em_m">Metin</label><textarea id="em_m" rows="8">${esc(emDoldur(A.metin,v))}</textarea><span class="hint">Metnin altına vadesi geçmiş, vadesi gelmemiş ve toplam borç bilgisi ile cari, dönem ve kapanış bakiyesi tablosu kendiliğinden eklenir; ekstre PDF olarak ektedir.</span></div>
+    <div class="f w"><label for="em_m">Metin</label><textarea id="em_m" rows="12">${esc(emMetin(A.metin,v,c))}</textarea><span class="hint">Vadesi geçmiş, vadesi gelmemiş ve toplam borç bilgisi metne yazıldı; dilerseniz düzenleyin. Mailin altına cari, dönem ve kapanış bakiyesi tablosu eklenir; ekstre PDF olarak ektedir.</span></div>
     <div class="f w small muted" id="emDurum">${GM.hazir()?`Gönderen: <b>${esc(GM.email||"bağlı Gmail hesabı")}</b>`:`Gönder'e bastığınızda Google penceresi açılır; firmanın Gmail hesabıyla izin verin${A.hesap?` (son kullanılan: ${esc(A.hesap)})`:""}.`}</div>
     <p class="err" id="mErr" hidden></p></form>`,
     `<button class="btn" type="button" id="emPdf">PDF'i önizle</button><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="emF" id="emGo" data-w ${emClientId()?"":"disabled"}>Gönder</button></div>`);
   const ozel=()=>{ const d=$("#em_d").value; return {bas:d==="ekran"?f.bas||"":emDonemBas(d),kime:$("#em_k").value.trim(),cc:$("#em_cc").value.trim(),konu:$("#em_s").value.trim(),metin:$("#em_m").value}; };
-  $("#em_d").addEventListener("change",()=>{ const o=ozel(), v2=emDegisken(c,ekstreRows(id,o.bas,"").son,o.bas); const t=$("#em_m"); if(!t.dataset.el) t.value=emDoldur(A.metin,v2); });
+  $("#em_d").addEventListener("change",()=>{ const o=ozel(), v2=emDegisken(c,ekstreRows(id,o.bas,"").son,o.bas); const t=$("#em_m"); if(!t.dataset.el) t.value=emMetin(A.metin,v2,c); });
   $("#em_m").addEventListener("input",e=>e.target.dataset.el="1");
   $("#emPdf").addEventListener("click",async()=>{ const o=ozel(); const pdf=await ekstrePDF(id,o.bas,""), u=URL.createObjectURL(new Blob([pdf],{type:"application/pdf"}));
     if(!window.open(u,"_blank")) saveFile(`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,new Blob([pdf],{type:"application/pdf"})); setTimeout(()=>URL.revokeObjectURL(u),120000); });
@@ -3224,7 +3230,7 @@ function emPanel(){ const A=emAyar(), dis=S.canWrite?"":"disabled";
     ${GOOGLE_CLIENT_ID?"":`<div class="f w"><label for="em_cid">Google istemci kimliği (OAuth Client ID)</label><input type="text" id="em_cid" name="clientId" value="${esc(A.clientId||"")}" placeholder="1234567890-xxxx.apps.googleusercontent.com" ${S.canEdit?"":"disabled"}><span class="hint">Bir kez kurulur; mali müşavirinizden alın.</span></div>`}
     <div class="f w"><label for="em_ak">Konu</label><input type="text" id="em_ak" name="konu" value="${esc(A.konu)}" ${dis}></div>
     <div class="f w"><label for="em_am">Metin</label><textarea id="em_am" name="metin" rows="7" ${dis}>${esc(A.metin)}</textarea>
-      <span class="hint">Kullanılabilecek alanlar: {hitap} (yetkili, yoksa ünvan) · {unvan} · {yetkili} · {bakiye} (örn. 12.500,00 ₺ borç) · {vadesiGecmis} · {vadesiGelmemis} · {toplamBorc} · {tarih} · {donem} · {firma}<br>Vadesi geçmiş, vadesi gelmemiş ve toplam borç bilgisi her mailde metnin altına kendiliğinden eklenir.</span></div>
+      <span class="hint">Kullanılabilecek alanlar: {hitap} (yetkili, yoksa ünvan) · {unvan} · {yetkili} · {bakiye} (örn. 12.500,00 ₺ borç) · {vadesiGecmis} · {vadesiGelmemis} · {toplamBorc} · {tarih} · {donem} · {firma}<br>Şablonda bu üç alan yoksa vadesi geçmiş, vadesi gelmemiş ve toplam borç bilgisi "Saygılarımızla" satırının üstüne kendiliğinden yazılır.</span></div>
     ${WA_ACIK?"":"<!--"}<div class="f w"><label for="em_wa">WhatsApp mesajı</label><textarea id="em_wa" name="waMetin" rows="5" ${dis}>${esc(A.waMetin||WA_VARS)}</textarea><span class="hint">Aynı alanlar kullanılır. *yıldız arası* WhatsApp'ta kalın görünür. WhatsApp gönderimi her mesajda sizin onayınızla yapılır; otomatik gönderim yalnızca e-postada vardır.</span></div>${WA_ACIK?"":"-->"}
     <div class="f"><label for="em_acc">Her maile bilgi (CC)</label><input type="text" id="em_acc" name="cc" value="${esc(A.cc)}" placeholder="İsteğe bağlı, örn. muhasebe adresi" ${dis}></div>
     <div class="f"><label for="em_ad">Ekstre dönemi</label><select id="em_ad" name="donem" ${dis}>${Object.entries(EM_DONEM).map(([k,t])=>`<option value="${k}" ${A.donem===k?"selected":""}>${t}</option>`).join("")}</select></div>
@@ -4683,7 +4689,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.16.2-önizleme";
+const SURUM="1.16.3-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
