@@ -645,8 +645,8 @@ async function dosyalariOku(){
   const out=[];
   const zaman=(p,ms)=>Promise.race([p,new Promise((_,r)=>setTimeout(()=>r(new Error("zaman aşımı")),ms))]);
   const ekle=async(yol,h)=>{ try{ const fl=await zaman(h.getFile(),30000); out.push({dosya:yol,f:JSON.parse(await zaman(fl.text(),30000)),mod:fl.lastModified}); }catch(e){ console.warn("okunamadı",yol,e); (S.okunamayan||(S.okunamayan=[])).push(yol); } };
-  S.okunamayan=[];
-  for await (const [n,h] of S.dir.entries()){
+  S.okunamayan=[]; let say=0; const ilerle=()=>{ const el=$("#okIl"); if(el) el.textContent=`${++say} öğe tarandı · ${out.length} firma dosyası okundu`; };
+  for await (const [n,h] of S.dir.entries()){ ilerle();
     if(h.kind==="file"&&n.endsWith(".skypro.json")) await ekle(n,h);
     else if(h.kind==="directory"&&n!=="yedek"&&!n.startsWith(".")){ try{ for await (const [n2,h2] of h.entries()) if(h2.kind==="file"&&n2.endsWith(".skypro.json")) await ekle(n+"/"+n2,h2); }catch{} }
   }
@@ -654,7 +654,7 @@ async function dosyalariOku(){
 }
 async function startScreen(mesaj){
   if(!window.showDirectoryPicker){ startShow(`<div class="notice bad">Bu program Microsoft Edge veya Google Chrome ile açılmalıdır.</div>`); return; }
-  if(!S.dir){ const h=await kvGet("dir"); if(h) S.dir=h; }
+  if(!S.dir){ const h=await Promise.race([kvGet("dir"),new Promise(r=>setTimeout(()=>r(null),5000))]); if(h) S.dir=h; }
   if(!S.dir){ startShow(panel("",`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
     <p style="margin:0">İlk kullanım: verilerin saklanacağı bir klasör seçin. Firmalar bu klasörde parolayla şifrelenmiş dosyalar olarak durur; günlük yedekler <b>yedek</b> alt klasörüne alınır.</p>
     <p class="small muted" style="margin:0">Öneri: Belgeler içinde <b>SKYPRO Veri</b> adlı yeni bir klasör açıp onu seçin.</p>
@@ -663,7 +663,11 @@ async function startScreen(mesaj){
   if(perm!=="granted"){ startShow(panel("",`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
     <p style="margin:0">Güvenlik gereği her açılışta veri klasörüne erişim izni bir kez onaylanır.</p>
     <div class="btns"><button class="btn pri" data-act="izinVer">Devam et</button><button class="btn" data-act="klasorSec">Başka klasör seç</button></div></div>`)); return; }
-  const dosyalar=await dosyalariOku();
+  // klasör okunurken ilerleme; 10 sn'de bitmezse (Drive kapalı / eşitleme sürüyor) açıklama ve seçenekler
+  startShow(`<div class="loading">Veri klasörü okunuyor: <b>${esc(S.dir.name)}</b>…</div><div class="small muted" id="okIl" style="text-align:center"></div><div id="okUyari"></div>`);
+  const uyT=setTimeout(()=>{ const el=$("#okUyari"); if(el) el.innerHTML=`<div class="notice warn" style="max-width:520px;margin:12px auto 0">Veri klasörü beklenenden uzun sürede okunuyor. Klasör Google Drive'daysa <b>Google Drive uygulamasının açık</b> ve bilgisayarın <b>internete bağlı</b> olduğunu kontrol edin; Drive eşitlemesi bitince okuma kendiliğinden tamamlanır.
+    <div class="btns" style="margin-top:10px;justify-content:flex-start"><button class="btn" onclick="location.reload()">Tekrar dene</button><button class="btn" data-act="klasorSec">Başka klasör seç</button></div></div>`; },10000);
+  let dosyalar; try{ dosyalar=await dosyalariOku(); } finally { clearTimeout(uyT); }
   const sifresiz=dosyalar.filter(x=>!sifreli(x.f));
   if(!dosyalar.length){ startShow(`${mesaj?`<div class="notice">${esc(mesaj)}</div>`:""}${panel("Kurulum",`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
     <p style="margin:0">Seçilen <b>${esc(S.dir.name)}</b> klasöründe firma dosyası (.skypro.json) bulunamadı.${S.okunamayan?.length?` ${S.okunamayan.length} dosya okunamadı; Drive eşitlemesinin bitmesini bekleyip sayfayı yenileyin.`:""} Yanlış klasörü seçtiyseniz <a href="#" data-act="klasorSec">başka klasör seçin</a>.</p>
@@ -4697,7 +4701,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.16.4-önizleme";
+const SURUM="1.16.5-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
