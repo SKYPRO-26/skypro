@@ -3359,6 +3359,7 @@ function tmEsle(c,K,yil){ const el=tmAyar().klasor[`${yil}|${c.id}`]; if(el) ret
   return K.find(f=>tmNorm(f.name.replace(/\d{10,11}/g,""))===u)||K.find(f=>tmNorm(f.name).startsWith(u+" "))||null; }
 // dosya adından dönem: "09-2026", "07.09-2026" (3 aylık), "3. DÖNEM" (çeyrek; yıl addan ya da kök klasörden)
 function tmDonem(ad,yil){ const u=String(ad).toLocaleUpperCase("tr"); let m;
+  if((m=u.match(/(?:^|\D)(\d{2})(\d{2})(20\d{2})-(\d{2})(\d{2})(20\d{2})(?!\d)/))) return {bas:`${m[3]}-${m[2]}`,bit:`${m[6]}-${m[5]}`}; // GİB e-beyanname: ..._01102026-31102026.xml_TKH.pdf
   if((m=u.match(/(?:^|\D)(\d{2})\.(\d{2})-(\d{4})(?!\d)/))) return {bas:`${m[3]}-${m[1]}`,bit:`${m[3]}-${m[2]}`};
   if((m=u.match(/(?:^|\D)(\d{2})-(\d{4})(?!\d)/))&&+m[1]>=1&&+m[1]<=12) return {bas:`${m[2]}-${m[1]}`,bit:`${m[2]}-${m[1]}`};
   if((m=u.match(/(?:^|\D)(20\d{2})(0[1-9]|1[0-2])(?!\d)/))) return {bas:`${m[1]}-${m[2]}`,bit:`${m[1]}-${m[2]}`}; // e-Bildirge: ..._202609_..._THK.pdf
@@ -3367,7 +3368,7 @@ function tmDonem(ad,yil){ const u=String(ad).toLocaleUpperCase("tr"); let m;
 // dosya türü: tahakkuk (TAHAKKUK/THK), hizmet listesi (HZM, HİZMET, APHB, LİSTE… — SGK klasöründe), türü anlaşılamayan SGK belgesi (işaretsiz önerilir)
 const tmTur = f => { const u=f.name.toLocaleUpperCase("tr").replace(/\.PDF$/,"").replace(/_/g," ").trim(), y=(f.yol||"").toLocaleUpperCase("tr"), sgk=/SGK/.test(y+" "+u);
   const tok=k=>new RegExp(`(^|[^A-ZÇĞİÖŞÜ])${k}($|[^A-ZÇĞİÖŞÜ])`).test(u)||u.endsWith(k);
-  if(/TAHAKKUK/.test(u)||tok("THK")) return "tahakkuk";
+  if(/TAHAKKUK/.test(u)||tok("THK")||tok("TKH")) return "tahakkuk"; // GİB: _THK / _TKH = tahakkuk, _BYN = beyanname
   if(!sgk) return null;
   if(tok("ÖDM")||tok("ODM")||/B[İI]LD[İI]RGE|D[İI]LEKÇE|BEYANNAME|SÖZLEŞME|DEKONT|MAKBUZ/.test(u)) return null; // ödeme, giriş/çıkış bildirgesi vb. gönderilmez
   if(tok("HZM")||/H[İI]ZMET|APHB|PR[İI]M\s*B[EİI]LGE|L[İI]STE|DÖKÜM/.test(u)) return "hizmet";
@@ -3386,7 +3387,7 @@ async function tmCariTara(c,ay){ const yil=ay.slice(0,4), K=await tmMusteriKlaso
   const L=await tmTara(k.id), pBas=ayKaydir(ay,1)+"-01", pBit=aySonu(ayKaydir(ay,2)), d=[];
   for(const f of L){ const tur=tmTur(f)||"diger", dn=tmDonem(f.name,yil), donemsel=TM_DONEMSEL.test(tmNorm(f.yol)+" "+tmNorm(f.name)), t=(f.createdTime||f.modifiedTime||"").slice(0,10), pencere=t>=pBas&&t<=pBit;
     const onerilen=tur==="tahakkuk"||tur==="hizmet";
-    if(!onerilen&&/BEYANNAME|D[İI]LEKÇE/.test(f.name.toLocaleUpperCase("tr"))) continue; // beyanname ve dilekçeler listelenmez
+    if(!onerilen&&(/BEYANNAME|D[İI]LEKÇE/.test(f.name.toLocaleUpperCase("tr"))||/(^|[^A-ZÇĞİÖŞÜ])BYN($|[^A-ZÇĞİÖŞÜ])/.test(f.name.toLocaleUpperCase("tr").replace(/\.PDF$/,"").replace(/_/g," ")))) continue; // beyanname (BYN) ve dilekçeler listelenmez
     if(dn&&dn.bit===ay) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:onerilen,boyut:+f.size||0});
     else if(!dn&&pencere&&(donemsel||tur!=="diger")) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:onerilen&&donemsel,belirsiz:true,boyut:+f.size||0}); }
   const sira={tahakkuk:0,hizmet:1,sgk:2,diger:3}; d.sort((a,b)=>(a.yol||"").localeCompare(b.yol||"","tr")||sira[a.tur]-sira[b.tur]||a.ad.localeCompare(b.ad,"tr"));
@@ -4710,7 +4711,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.16.6-önizleme";
+const SURUM="1.16.7-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
