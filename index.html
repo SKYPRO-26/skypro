@@ -333,6 +333,15 @@ tr.secili td{background:var(--accent-soft)!important}
 <div id="guncel" hidden role="status"><span>SKYPRO'nun yeni sürümü hazır. Kayıtlarınız kaydedilir; güncellemeden sonra yeniden giriş yapmanız gerekir.</span><button type="button" id="guncelBtn">Şimdi güncelle</button></div>
 
 <script>
+/* açılış hatası yakalayıcı: program açılamazsa hatayı ekrana yazar (eski "Açılıyor…"da kalmasın) */
+(function(){ const goster=(t)=>{ const b=document.getElementById("startBody"); const st=document.getElementById("start"); if(!b||!st||st.hidden) return;
+  if(b.dataset.hata) { b.querySelector("pre").textContent+="\n"+t; return; } b.dataset.hata="1";
+  b.innerHTML='<div class="notice bad" style="max-width:640px"><b>Program açılırken bir hata oluştu.</b> Lütfen bu ekranın görüntüsünü gönderin.<pre style="white-space:pre-wrap;font-size:12px;margin:8px 0 0"></pre><div style="margin-top:10px"><button class="btn" onclick="location.reload()">Tekrar dene</button></div></div>';
+  b.querySelector("pre").textContent=t; };
+  window.addEventListener("error",e=>goster(`${e.message||e.error} (${(e.filename||"").split("/").pop()}:${e.lineno||""})`));
+  window.addEventListener("unhandledrejection",e=>goster("Promise: "+(e.reason?.stack||e.reason?.message||e.reason)));
+  setTimeout(()=>{ const b=document.getElementById("startBody"); if(b&&/Açılıyor/.test(b.textContent)&&!b.dataset.hata) goster("Açılış 15 saniyede tamamlanmadı (startScreen yanıt vermedi)."); },15000); })();
+
 "use strict";
 /* ---------- yardımcılar ---------- */
 const $ = s => document.querySelector(s);
@@ -644,8 +653,8 @@ async function dosyalariOku(){
   const out=[];
   const zaman=(p,ms)=>Promise.race([p,new Promise((_,r)=>setTimeout(()=>r(new Error("zaman aşımı")),ms))]);
   const ekle=async(yol,h)=>{ try{ const fl=await zaman(h.getFile(),30000); out.push({dosya:yol,f:JSON.parse(await zaman(fl.text(),30000)),mod:fl.lastModified}); }catch(e){ console.warn("okunamadı",yol,e); (S.okunamayan||(S.okunamayan=[])).push(yol); } };
-  S.okunamayan=[];
-  for await (const [n,h] of S.dir.entries()){
+  S.okunamayan=[]; let say=0; const ilerle=()=>{ const el=$("#okIl"); if(el) el.textContent=`${++say} öğe tarandı · ${out.length} firma dosyası okundu`; };
+  for await (const [n,h] of S.dir.entries()){ ilerle();
     if(h.kind==="file"&&n.endsWith(".skypro.json")) await ekle(n,h);
     else if(h.kind==="directory"&&n!=="yedek"&&!n.startsWith(".")){ try{ for await (const [n2,h2] of h.entries()) if(h2.kind==="file"&&n2.endsWith(".skypro.json")) await ekle(n+"/"+n2,h2); }catch{} }
   }
@@ -653,16 +662,20 @@ async function dosyalariOku(){
 }
 async function startScreen(mesaj){
   if(!window.showDirectoryPicker){ startShow(`<div class="notice bad">Bu program Microsoft Edge veya Google Chrome ile açılmalıdır.</div>`); return; }
-  if(!S.dir){ const h=await kvGet("dir"); if(h) S.dir=h; }
+  if(!S.dir){ const h=await Promise.race([kvGet("dir"),new Promise(r=>setTimeout(()=>r(null),5000))]); if(h) S.dir=h; }
   if(!S.dir){ startShow(panel("",`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
     <p style="margin:0">İlk kullanım: verilerin saklanacağı bir klasör seçin. Firmalar bu klasörde parolayla şifrelenmiş dosyalar olarak durur; günlük yedekler <b>yedek</b> alt klasörüne alınır.</p>
     <p class="small muted" style="margin:0">Öneri: Belgeler içinde <b>SKYPRO Veri</b> adlı yeni bir klasör açıp onu seçin.</p>
     <div><button class="btn pri" data-act="klasorSec">Veri klasörünü seç</button></div></div>`)); return; }
-  let perm="prompt"; try{ perm=await S.dir.queryPermission({mode:"readwrite"}); }catch{}
+  let perm="prompt"; try{ perm=await Promise.race([S.dir.queryPermission({mode:"readwrite"}),new Promise(r=>setTimeout(()=>r("prompt"),5000))]); }catch{}
   if(perm!=="granted"){ startShow(panel("",`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
     <p style="margin:0">Güvenlik gereği her açılışta veri klasörüne erişim izni bir kez onaylanır.</p>
     <div class="btns"><button class="btn pri" data-act="izinVer">Devam et</button><button class="btn" data-act="klasorSec">Başka klasör seç</button></div></div>`)); return; }
-  const dosyalar=await dosyalariOku();
+  // klasör okunurken ilerleme; 10 sn'de bitmezse (Drive kapalı / eşitleme sürüyor) açıklama ve seçenekler
+  startShow(`<div class="loading">Veri klasörü okunuyor: <b>${esc(S.dir.name)}</b>…</div><div class="small muted" id="okIl" style="text-align:center"></div><div id="okUyari"></div>`);
+  const uyT=setTimeout(()=>{ const el=$("#okUyari"); if(el) el.innerHTML=`<div class="notice warn" style="max-width:520px;margin:12px auto 0">Veri klasörü beklenenden uzun sürede okunuyor. Klasör Google Drive'daysa <b>Google Drive uygulamasının açık</b> ve bilgisayarın <b>internete bağlı</b> olduğunu kontrol edin; Drive eşitlemesi bitince okuma kendiliğinden tamamlanır.
+    <div class="btns" style="margin-top:10px;justify-content:flex-start"><button class="btn" onclick="location.reload()">Tekrar dene</button><button class="btn" data-act="klasorSec">Başka klasör seç</button></div></div>`; },10000);
+  let dosyalar; try{ dosyalar=await dosyalariOku(); } finally { clearTimeout(uyT); }
   const sifresiz=dosyalar.filter(x=>!sifreli(x.f));
   if(!dosyalar.length){ startShow(`${mesaj?`<div class="notice">${esc(mesaj)}</div>`:""}${panel("Kurulum",`<div class="pad" style="display:flex;flex-direction:column;gap:12px">
     <p style="margin:0">Seçilen <b>${esc(S.dir.name)}</b> klasöründe firma dosyası (.skypro.json) bulunamadı.${S.okunamayan?.length?` ${S.okunamayan.length} dosya okunamadı; Drive eşitlemesinin bitmesini bekleyip sayfayı yenileyin.`:""} Yanlış klasörü seçtiyseniz <a href="#" data-act="klasorSec">başka klasör seçin</a>.</p>
@@ -1089,7 +1102,7 @@ function vCariler(){
   :`<div class="empty">${S.cariler.size?"Filtreye uyan cari yok.":"Henüz cari kartı yok. Sağ üstten <b>Yeni cari</b> ile başlayın."}</div>`}</section>
   <p class="small muted">B: cari bize borçlu (alacağımız) · A: cari alacaklı (borcumuz). Dövizli carilerde TL karşılığı Ayarlar'daki güncel kurla hesaplanır.</p>
   ${cariAktarimPanel()}`;
-  return {title:"Cari hesaplar",btns:`${modulAcik("ekstreMail")?`<button class="btn" data-act="emTopluAc" data-w title="Müşterilere PDF ekli ekstreyi e-posta ile gönder">📧 Toplu ekstre gönder</button>`:""}${WA_ACIK&&modulAcik("ekstreMail")?`<button class="btn" data-act="waTopluAc" data-w title="Müşterilere bakiye mesajını WhatsApp ile gönder">💬 Toplu WhatsApp</button>`:""}<button class="btn" data-act="cariAktar" data-w>Excel'den cari al</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
+  return {title:"Cari hesaplar",btns:`${modulAcik("ekstreMail")?`<button class="btn" data-act="emTopluAc" data-w title="Müşterilere PDF ekli ekstreyi e-posta ile gönder">📧 Toplu ekstre gönder</button>`:""}${WA_ACIK&&modulAcik("ekstreMail")?`<button class="btn" data-act="waTopluAc" data-w title="Müşterilere bakiye mesajını WhatsApp ile gönder">💬 Toplu WhatsApp</button>`:""}<button class="btn" data-act="excelAktar" data-w title="Entegratör fatura listesi ya da borç/alacaklı cari listesi">Excel'den aktar</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
     after(){
       $("#cfq").addEventListener("input",e=>{f.q=e.target.value; const p=e.target.selectionStart; render(); const i=$("#cfq"); i.focus(); i.setSelectionRange(p,p);});
       $("#cftip").addEventListener("change",e=>{f.tip=e.target.value;render();});
@@ -2638,10 +2651,10 @@ function caHareket(r,cariId,doviz,aid,st){
   if(r.b) yap(r.b,"b"); if(r.a) yap(r.a,"a");
   return out;
 }
-function cariAktarAc(){
+function cariAktarAc(on){
   Object.keys(CA).forEach(k=>delete CA[k]);
   Object.assign(CA,{tip:"musteri",bosKart:true,varsTarih:TODAY.slice(0,4)+"-01-01",esle:{},etiket:{},hesap:{},say:{}});
-  modal("Excel'den cari hesapları al",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px" id="caKok">
+  modal("Excel'den aktar",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px" id="caKok">${exTurSec("cari")}
     <div class="filters"><label>Excel dosyası<input type="file" id="ca_f" accept=".xlsx,.xls,.csv,.txt,.htm,.html"></label></div>
     <p class="small muted" style="margin:0">Firma adı, tarih, açıklama, borç ve alacak sütunları olan listenizi seçin. Aynı firmanın satırları tek cari kartında toplanır; programda zaten olan firmalar ünvan veya VKN'den tanınır.</p>
     <div id="caEsle"></div><div id="caOn"></div></div>`,
@@ -2655,6 +2668,8 @@ function cariAktarAc(){
     if(!CA.rows.length){ $("#caEsle").innerHTML=`<div class="notice bad">Dosyada satır bulunamadı.</div>`; return; }
     CA.baslik=caBaslikBul(CA.rows); CA.kol=caKolon(CA.rows[CA.baslik]||[]); CA.esle={}; caCiz();
   });
+  exTurBagla();
+  if(on?.rows){ CA.rows=on.rows; CA.dosya=on.dosya; CA.baslik=caBaslikBul(CA.rows); CA.kol=caKolon(CA.rows[CA.baslik]||[]); CA.esle={}; caCiz(); $("#ca_f").closest("label").insertAdjacentHTML("afterend",`<span class="small muted" style="align-self:end;padding-bottom:8px">Seçili dosya: <b>${esc(on.dosya)}</b></span>`); }
   $("#caGo").addEventListener("click",caKaydet);
   $("#caKok").addEventListener("change",e=>{ const t=e.target, d=t.dataset;
     if(d.k){ if(d.k==="baslik"){ CA.baslik=Math.max(0,(+t.value||1)-1); CA.kol=caKolon(CA.rows[CA.baslik]||[]); } else CA.kol[d.k]=+t.value; if(d.k==="baslik"||d.k==="tur"||d.k==="aciklama"){ CA.esle={}; CA.hesap={}; } caCiz(); return; }
@@ -2722,16 +2737,155 @@ function caKaydet(){
   S.data.cariAktarim=[{id:aid,tarih:new Date().toISOString(),dosya:CA.dosya,by:S.me||null},...(S.data.cariAktarim||[])].slice(0,30);
   closeModal(); changed(); toast(`${yeniC} yeni cari açıldı, ${hr} hareket işlendi`);
 }
+/* ---------- Excel'den fatura aktarımı (e-fatura entegratörü listeleri) ----------
+   Giden fatura → satış (cari borçlanır), gelen fatura → alış (cari alacaklanır). İade faturaları da aynı yönde işlenir, açıklamaya "İade" yazılır.
+   Cari VKN/TCKN veya ünvandan tanınır, yoksa açılır. Aynı fatura (ETTN ya da cari + fatura no) ikinci kez aktarılmaz. */
+const FA = {};
+const FA_ALAN=[
+  ["belge","Fatura no",/FATURA NO|FATURA NUMARASI|BELGE NO|EVRAK NO|^NO$|FATURA ID/],
+  ["tarih","Fatura tarihi",/FATURA TARIHI|DUZENLEME TARIHI|BELGE TARIHI|^TARIH$|^TARIH |TARIHI$/],
+  ["unvan","Karşı firma (ünvan)",/ALICI UNVAN|ALICI ADI|SATICI UNVAN|SATICI ADI|GONDERICI UNVAN|GONDERICI ADI|MUSTERI UNVAN|TEDARIKCI|UNVAN|ALICI|SATICI|GONDERICI|MUSTERI|FIRMA|CARI/],
+  ["vkn","VKN / TCKN",/VKN|TCKN|VERGI NO|VERGI NUMARASI|KIMLIK/],
+  ["toplam","Fatura toplamı (ödenecek)",/ODENECEK|VERGILER DAHIL|GENEL TOPLAM|FATURA TUTARI|FATURA TOPLAMI|TOPLAM TUTAR|^TOPLAM$|^TUTAR$/],
+  ["matrah","Matrah (KDV hariç)",/MATRAH|MAL HIZMET TOPLAM|VERGI HARIC|KDV HARIC|ARA TOPLAM/],
+  ["kdv","KDV tutarı",/HESAPLANAN KDV|KDV TUTAR|TOPLAM KDV|^KDV$/],
+  ["doviz","Para birimi",/PARA BIRIMI|DOVIZ|CURRENCY|^PB$/],
+  ["kur","Döviz kuru",/KUR/],
+  ["yon","Yön (gelen/giden)",/YON|GELEN GIDEN|GELEN|GIDEN|^TUR$|ISLEM TURU/],
+  ["tip","Fatura tipi",/FATURA TIPI|FATURA TURU|BELGE TIPI|^TIP$|TIPI$/],
+  ["vade","Vade / son ödeme",/VADE|SON ODEME/],
+  ["ettn","ETTN / UUID",/ETTN|UUID/]];
+// sütun eşleme: önce kimlik/tutar gibi belirgin alanlar, ünvan en son (ör. "Alıcı VKN" ünvan sanılmasın); toplamda "ödenecek" önceliklidir
+const FA_SIRA=["ettn","belge","tarih","vade","vkn","doviz","kur","kdv","matrah","toplam","tip","yon","unvan"];
+const FA_ONCELIK={toplam:[/ODENECEK/,/VERGILER DAHIL/,/GENEL TOPLAM/,/FATURA (TUTARI|TOPLAMI)/,/^TOPLAM TUTAR$/,/^TOPLAM$/,/^TUTAR$/],unvan:[/UNVAN/,/ADI SOYADI|^ADI$|ISIM/,/ALICI|SATICI|GONDERICI|MUSTERI|TEDARIKCI|FIRMA|CARI/]};
+function faKolon(bas){ const h=bas.map(x=>bkNorm(x)), k={}, used=new Set(), re={}; for(const [ad,,r] of FA_ALAN) re[ad]=r;
+  for(const ad of FA_SIRA){ k[ad]=-1; for(const r of FA_ONCELIK[ad]||[re[ad]]){ const i=h.findIndex((x,j)=>x&&!used.has(j)&&r.test(x)&&!(ad==="unvan"&&/VKN|TCKN|VERGI|KIMLIK|TARIH|NO$|TIPI|TUTAR|ADRES|IL$|ILCE|ETIKET|POSTA/.test(x))); if(i>-1){ k[ad]=i; used.add(i); break; } } }
+  return k; }
+function faBaslikBul(rows){ let en=0,sk=0; rows.slice(0,30).forEach((r,i)=>{ const t=r.map(x=>bkNorm(x)); let s=0; for(const [ad,,re] of FA_ALAN) if(["belge","tarih","unvan","toplam","vkn"].includes(ad)&&t.some(x=>re.test(x))) s++; if(s>sk){ sk=s; en=i; } }); return en; }
+const faDv = v => { const t=bkNorm(v); if(!t||/TRY|TL|TURK/.test(t)) return "TRY"; if(/USD|DOLAR/.test(t)) return "USD"; if(/EUR|AVRO|EURO/.test(t)) return "EUR"; if(/GBP|STERLIN/.test(t)) return "GBP"; return t.slice(0,3); };
+function faPlanla(){
+  const k=FA.kol, P={satir:[],cariler:new Map(),tekrar:0,kilitli:0,eksik:0,dvYok:0};
+  const adMap=new Map(), vknMap=new Map();
+  for(const c of S.cariler.values()){ adMap.set(bkNorm(c.unvan),c); const v=String(c.vkn||"").replace(/\D/g,""); if(v.length>=10) vknMap.set(v,c); }
+  const ettnVar=new Set(S.hareketler.map(h=>h.ettn).filter(Boolean)), belgeVar=new Set(S.hareketler.filter(h=>["satis","alis"].includes(h.tur)&&h.belgeNo).map(h=>`${h.tur}|${h.cariId}|${bkNorm(h.belgeNo)}`)), dosyada=new Set();
+  const al=(r,a)=>k[a]>-1?r[k[a]]:"";
+  for(const row of FA.rows.slice(FA.baslik+1)){
+    const unvan=String(al(row,"unvan")??"").trim().replace(/\s+/g," "), vkn=String(al(row,"vkn")??"").replace(/\D/g,""), belge=String(al(row,"belge")??"").trim();
+    let top=Math.abs(bkTutar(al(row,"toplam")))||0; const mat=Math.abs(bkTutar(al(row,"matrah")))||0, kdv=Math.abs(bkTutar(al(row,"kdv")))||0;
+    if(!top&&mat) top=mat+kdv;
+    if(!unvan&&!vkn&&!belge&&!top) continue;
+    const tarih=bkTarih(al(row,"tarih"));
+    if(!(unvan||vkn)||!top||!tarih){ P.eksik++; continue; }
+    const yonT=bkNorm(al(row,"yon")), tipT=bkNorm(al(row,"tip"));
+    const yon=FA.yon!=="sutun"?FA.yon:(/GELEN|ALIS|ALINAN/.test(yonT)?"gelen":/GIDEN|SATIS|GONDERILEN|KESILEN/.test(yonT)?"giden":FA.yonVars);
+    const tur=yon==="gelen"?"alis":"satis", iade=/IADE/.test(tipT+" "+yonT);
+    const dv=faDv(al(row,"doviz")); if(dv!=="TRY"&&!kur(dv)) P.dvYok++;
+    const krS=bkTutar(al(row,"kur"));
+    const n=bkNorm(unvan), anahtarC=vkn.length>=10?"V"+vkn:"N"+n;
+    let C=P.cariler.get(anahtarC);
+    if(!C){ const c=(vkn.length>=10&&vknMap.get(vkn))||(n&&adMap.get(n))||null; C={unvan:unvan||vkn,vkn,cari:c,tip:tur==="alis"?"tedarikci":"musteri",doviz:dv,adet:0}; P.cariler.set(anahtarC,C); }
+    const ettn=String(al(row,"ettn")??"").trim(), bkey=`${tur}|${C.cari?.id||anahtarC}|${bkNorm(belge)}`;
+    if((ettn&&(ettnVar.has(ettn)||dosyada.has(ettn)))||(belge&&(belgeVar.has(bkey)||dosyada.has(bkey)))){ P.tekrar++; continue; }
+    if(kilitli(tarih)){ P.kilitli++; continue; }
+    if(ettn) dosyada.add(ettn); if(belge) dosyada.add(bkey);
+    const vade=bkTarih(al(row,"vade"));
+    const oran=mat>0&&kdv>=0?Math.round(kdv/mat*100):null;
+    C.adet++;
+    P.satir.push({C,tarih,vade:vade&&vade>=tarih?vade:"",belge,ettn,tur,iade,top:r2(top),dv,kur:dv==="TRY"?1:(krS>0?krS:kur(dv)||1),kdv:[0,1,8,10,18,20].includes(oran)?oran:null,ack:`${tur==="alis"?"Gelen":"Giden"} e-fatura${iade?" (iade)":""}${tipT&&!/SATIS|TEMEL|TICARI/.test(tipT)&&!iade?" · "+String(al(row,"tip")).trim():""}`});
+  }
+  FA.plan=P; }
+function faCiz(){
+  if(!FA.rows?.length) return;
+  const bas=FA.rows[FA.baslik]||[], k=FA.kol;
+  const sec=ad=>`<select data-fakol="${ad}"><option value="-1">— yok —</option>${bas.map((h,i)=>`<option value="${i}" ${k[ad]===i?"selected":""}>${esc(String(h||`Sütun ${i+1}`).slice(0,40))}</option>`).join("")}</select>`;
+  faPlanla(); const P=FA.plan, yeniC=[...P.cariler.values()].filter(c=>!c.cari&&c.adet).length;
+  const tS=P.satir.filter(x=>x.tur==="satis").reduce((s,x)=>s+x.top*x.kur,0), tA=P.satir.filter(x=>x.tur==="alis").reduce((s,x)=>s+x.top*x.kur,0);
+  const eksikZor=k.unvan<0&&k.vkn<0||k.tarih<0||(k.toplam<0&&k.matrah<0);
+  $("#faEsle").innerHTML=`<div class="panel"><header><h2>Sütunlar</h2><span class="small muted">Program tanıdı; yanlışsa değiştirin</span></header>
+    <div class="pad" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">${FA_ALAN.map(([ad,et])=>`<label class="small" style="display:flex;flex-direction:column;gap:4px">${et}${sec(ad)}</label>`).join("")}</div>
+    <div class="pad" style="padding-top:0;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+      <label class="small" style="display:flex;flex-direction:column;gap:4px">Bu dosyadaki faturalar
+      <select id="fa_yon"><option value="giden" ${FA.yon==="giden"?"selected":""}>Giden faturalar → satış (müşteri borçlanır)</option><option value="gelen" ${FA.yon==="gelen"?"selected":""}>Gelen faturalar → alış (tedarikçi alacaklanır)</option>${k.yon>-1?`<option value="sutun" ${FA.yon==="sutun"?"selected":""}>"${esc(String(bas[k.yon]||"Yön"))}" sütununa göre</option>`:""}</select></label>
+    </div></div>`;
+  $("#faOn").innerHTML=eksikZor?`<div class="notice bad">Fatura tarihi, karşı firma (ünvan veya VKN) ve fatura toplamı sütunları seçilmeli.</div>`:`
+    ${[P.tekrar?`${P.tekrar} fatura daha önce aktarılmış, atlandı.`:"",P.kilitli?`${P.kilitli} fatura kilitli dönemde, atlandı.`:"",P.eksik?`${P.eksik} satırda tarih, firma veya tutar eksik, atlandı.`:"",P.dvYok?`${P.dvYok} dövizli faturada kur yok; Ayarlar'daki kurlar kullanılacak.`:""].filter(Boolean).map(t=>`<div class="notice small">${t}</div>`).join("")}
+    <div class="panel"><header><h2>Aktarılacak faturalar (${P.satir.length})</h2><span class="small muted">${yeniC} yeni cari açılacak</span></header>
+    <div class="tw" style="max-height:42vh;overflow:auto"><table><thead><tr><th>Tarih</th><th>Fatura no</th><th>Firma</th><th>Durum</th><th>Tür</th><th class="r">Tutar</th></tr></thead><tbody>
+    ${P.satir.slice(0,400).map(x=>`<tr><td class="mono small">${trDate(x.tarih)}${x.vade?`<div class="muted">vade ${trDate(x.vade)}</div>`:""}</td><td class="mono small">${esc(x.belge||"—")}</td><td class="small">${esc(x.C.unvan)}${x.C.vkn?`<div class="muted mono">${esc(x.C.vkn)}</div>`:""}</td>
+      <td>${x.C.cari?`<span class="pill">Mevcut · ${esc(x.C.cari.kod)}</span>`:`<span class="pill acc">Yeni ${x.C.tip==="tedarikci"?"tedarikçi":"müşteri"}</span>`}</td><td class="small">${x.tur==="satis"?"Satış":"Alış"}${x.iade?" · iade":""}</td><td class="r amt">${money(x.top,x.dv)}</td></tr>`).join("")}
+    ${P.satir.length>400?`<tr><td colspan="6" class="muted small">… ve ${P.satir.length-400} fatura daha</td></tr>`:""}
+    </tbody><tfoot><tr><td colspan="5">Toplam · satış ${money(tS)} · alış ${money(tA)}</td><td></td></tr></tfoot></table></div></div>`;
+  $("#faOzet").textContent=eksikZor?"":`${P.satir.length} fatura işlenecek · ${yeniC} yeni cari`;
+  $("#faGo").disabled=eksikZor||!P.satir.length||!S.canWrite;
+  document.querySelectorAll("[data-fakol]").forEach(s=>s.addEventListener("change",()=>{ FA.kol[s.dataset.fakol]=+s.value; faCiz(); }));
+  $("#fa_yon").addEventListener("change",e=>{ FA.yon=e.target.value; faCiz(); }); }
+function faturaAktarAc(on){
+  Object.keys(FA).forEach(k=>delete FA[k]); Object.assign(FA,{yon:"giden",yonVars:"giden"});
+  modal("Excel'den aktar",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px">${exTurSec("fatura")}
+    <div class="filters"><label>Fatura listesi (Excel / CSV)<input type="file" id="fa_f" accept=".xlsx,.xls,.csv,.txt,.htm,.html"></label></div>
+    <p class="small muted" style="margin:0">e-Fatura entegratörünüzden indirdiğiniz <b>giden</b> veya <b>gelen</b> fatura listesini seçin. Giden faturalar satış, gelen faturalar alış olarak carilere işlenir; olmayan cariler VKN/TCKN veya ünvandan açılır. Aynı fatura ikinci kez aktarılmaz; aktarımı Cari hesaplar sayfasından geri alabilirsiniz.</p>
+    <div id="faEsle"></div><div id="faOn"></div></div>`,
+    `<span class="small muted" id="faOzet"></span><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" id="faGo" disabled>İçe aktar</button></div>`);
+  $("#overlay .sheet").style.maxWidth="1100px";
+  $("#fa_f").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return;
+    $("#faEsle").innerHTML=`<div class="muted">Dosya okunuyor…</div>`; $("#faOn").innerHTML="";
+    try{ FA.rows=(await ekstreDosyaOku(f)).filter(r=>r.some(x=>String(x).trim()!=="")); FA.dosya=f.name; }
+    catch(x){ $("#faEsle").innerHTML=`<div class="notice bad">${x.message==="eskixls"?"Bu dosya eski Excel biçiminde (.xls). Excel'de açıp <b>Farklı Kaydet → Excel Çalışma Kitabı (.xlsx)</b> olarak kaydedin ve onu seçin.":"Dosya okunamadı. Excel (.xlsx) veya CSV olarak kaydedip tekrar deneyin."}</div>`; return; }
+    if(!FA.rows.length){ $("#faEsle").innerHTML=`<div class="notice bad">Dosyada satır bulunamadı.</div>`; return; }
+    faYukle(f.name); });
+  exTurBagla();
+  if(on?.rows){ FA.rows=on.rows; FA.dosya=on.dosya; faYukle(on.dosya); $("#fa_f").closest("label").insertAdjacentHTML("afterend",`<span class="small muted" style="align-self:end;padding-bottom:8px">Seçili dosya: <b>${esc(on.dosya)}</b></span>`); }
+  $("#faGo").addEventListener("click",faKaydet); }
+function faYukle(ad0){ FA.baslik=faBaslikBul(FA.rows); FA.kol=faKolon(FA.rows[FA.baslik]||[]);
+  const ad=bkNorm(ad0); FA.yon=FA.kol.yon>-1?"sutun":/GELEN|ALIS/.test(ad)?"gelen":"giden"; FA.yonVars=/GELEN|ALIS/.test(ad)?"gelen":"giden"; faCiz(); }
+/* tek düğme: "Excel'den aktar" — dosyaya bakıp cari listesi mi fatura listesi mi olduğunu anlar; pencerede tür değiştirilebilir */
+const EX={};
+function exTurSec(t){ return `<div class="seg" role="group" aria-label="Aktarım türü" style="align-self:flex-start"><button type="button" data-extur="fatura" aria-pressed="${t==="fatura"}">🧾 Fatura listesi (entegratör)</button><button type="button" data-extur="cari" aria-pressed="${t==="cari"}">👥 Cari listesi (borç / alacak)</button></div>`; }
+function exTurBagla(){ document.querySelectorAll("[data-extur]").forEach(b=>b.addEventListener("click",()=>{ const t=b.dataset.extur, rows=(t==="cari"?FA.rows:CA.rows)||EX.rows, dosya=(t==="cari"?FA.dosya:CA.dosya)||EX.dosya;
+  if(b.getAttribute("aria-pressed")==="true") return; (t==="cari"?cariAktarAc:faturaAktarAc)(rows?{rows,dosya}:null); })); }
+function exTurTahmin(rows){ let fa=0, ca=0; for(const r of rows.slice(0,30)){ const t=r.map(x=>bkNorm(x));
+  if(t.some(x=>/^BORC|BORC TUTAR|^ALACAK|ALACAK TUTAR/.test(x))) ca+=3;
+  if(t.some(x=>/ODENECEK|VERGILER DAHIL|MATRAH|ETTN|FATURA NO|FATURA NUMARASI|FATURA TARIHI|HESAPLANAN KDV/.test(x))) fa+=2; }
+  return fa>ca?"fatura":ca>fa?"cari":"fatura"; }
+function excelAktarAc(){
+  for(const k of Object.keys(EX)) delete EX[k];
+  modal("Excel'den aktar",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px">
+    <div class="filters"><label>Excel / CSV dosyası<input type="file" id="ex_f" accept=".xlsx,.xls,.csv,.txt,.htm,.html"></label></div>
+    <p class="small muted" style="margin:0">İki tür dosya aktarılabilir; program dosyaya bakıp türünü kendisi anlar, sonraki ekranda değiştirebilirsiniz:</p>
+    <ul class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+      <li><b>Fatura listesi:</b> e-Fatura entegratöründen indirilen giden / gelen fatura listesi (fatura no, tarih, alıcı/gönderici, VKN, ödenecek tutar…). Faturalar satış/alış olarak işlenir.</li>
+      <li><b>Cari listesi:</b> firma adı, tarih, açıklama, borç ve alacak sütunlu liste (eski programdan devir, cari ekstresi…).</li></ul>
+    <div id="exDurum"></div></div>`,`<span></span><button class="btn" data-act="close">Vazgeç</button>`);
+  $("#ex_f").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; $("#exDurum").innerHTML=`<div class="muted">Dosya okunuyor…</div>`;
+    let rows; try{ rows=(await ekstreDosyaOku(f)).filter(r=>r.some(x=>String(x).trim()!=="")); }
+    catch(x){ $("#exDurum").innerHTML=`<div class="notice bad">${x.message==="eskixls"?"Bu dosya eski Excel biçiminde (.xls). Excel'de açıp <b>Farklı Kaydet → Excel Çalışma Kitabı (.xlsx)</b> olarak kaydedin ve onu seçin.":"Dosya okunamadı. Excel (.xlsx) veya CSV olarak kaydedip tekrar deneyin."}</div>`; return; }
+    if(!rows.length){ $("#exDurum").innerHTML=`<div class="notice bad">Dosyada satır bulunamadı.</div>`; return; }
+    EX.rows=rows; EX.dosya=f.name; (exTurTahmin(rows)==="cari"?cariAktarAc:faturaAktarAc)({rows,dosya:f.name}); }); }
+function faKaydet(){
+  const P=FA.plan; if(!P||!S.canWrite) return;
+  const aid=uid("ca"), st=stamp(), yeniKod=kodSayaci(); let yc=0, n=0;
+  for(const C of P.cariler.values()){ if(C.cari||!C.adet) continue; const id=uid("cr");
+    S.data.cariler[id]={id,kod:yeniKod(C.tip),tip:C.tip,unvan:C.unvan,vkn:C.vkn,vd:"",doviz:C.doviz||"TRY",limit:null,yetkili:"",tel:"",eposta:"",iban:"",adres:"",not:"",caAktarim:aid,...st}; C.yeniId=id; yc++; }
+  for(const x of P.satir){ const cid=x.C.cari?.id||x.C.yeniId; if(!cid) continue; const cdv=S.cariler.get(cid)?.doviz||S.data.cariler[cid]?.doviz||"TRY";
+    const r={id:uid("hr"),tur:x.tur,tarih:x.tarih,cariId:cid,tutar:x.top,doviz:x.dv,kur:x.kur,belgeNo:x.belge,aciklama:x.ack,caAktarim:aid,...st};
+    if(x.dv!==cdv&&cdv==="TRY"){ r.tutar=r2(x.top*x.kur); r.doviz="TRY"; r.kur=1; r.aciklama+=` · ${money(x.top,x.dv)}`; }
+    if(x.vade) r.vade=x.vade; if(x.ettn) r.ettn=x.ettn; if(x.kdv!=null) r.kdv=x.kdv;
+    if(!r.belgeNo) bnTamamla(r);
+    S.data.hareketler[r.id]=r; n++; }
+  S.data.cariAktarim=[{id:aid,tarih:new Date().toISOString(),dosya:"Fatura listesi: "+FA.dosya,by:S.me||null},...(S.data.cariAktarim||[])].slice(0,30);
+  closeModal(); changed(); toast(`${n} fatura aktarıldı${yc?`, ${yc} yeni cari açıldı`:""}`); }
 function cariAktarimPanel(){
   const H=Object.values(S.data.hareketler), C=Object.values(S.data.cariler);
   const L=(S.data.cariAktarim||[]).map(a=>({a,h:H.filter(x=>x.caAktarim===a.id).length,c:C.filter(x=>x.caAktarim===a.id).length})).filter(x=>x.h||x.c).slice(0,5);
   if(!L.length) return "";
-  return `<section class="panel"><header><h2>Excel'den cari aktarımları</h2></header><div class="tw"><table><thead><tr><th>Aktarım</th><th>Dosya</th><th class="r">Açılan cari</th><th class="r">Hareket</th><th></th></tr></thead><tbody>
+  return `<section class="panel"><header><h2>Excel aktarımları</h2></header><div class="tw"><table><thead><tr><th>Aktarım</th><th>Dosya</th><th class="r">Açılan cari</th><th class="r">Hareket</th><th></th></tr></thead><tbody>
   ${L.map(({a,h,c})=>{ const d=new Date(a.tarih); return `<tr><td class="small">${trDate(iso(d))} ${d.toTimeString().slice(0,5)}${a.by?`<div class="muted">${esc(a.by)}</div>`:""}</td><td class="small muted">${esc(a.dosya||"")}</td><td class="r">${c}</td><td class="r">${h}</td><td><button class="btn sm" data-act="caGeriAl" data-id="${a.id}" data-w>Geri al</button></td></tr>`; }).join("")}
   </tbody></table></div></section>`;
 }
 Object.assign(ACT,{
   cariAktar:()=>cariAktarAc(),
+  faturaAktar:()=>faturaAktarAc(),
+  excelAktar:()=>excelAktarAc(),
   kodDuzenle:el=>{ if(!S.canEdit) return; const L=eskiKodlu(); if(!L.length) return;
     if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent=`${L.length} cari yeniden kodlansın mı? Onayla`; return; }
     const sayac=kodSayaci(); L.sort((a,b)=>(+a.kod.slice(1))-(+b.kod.slice(1)));
@@ -2959,7 +3113,7 @@ const GM_SCOPE="https://www.googleapis.com/auth/gmail.send";
 const EM_DONEM={ay1:"Son 1 ay",ay3:"Son 3 ay",ay6:"Son 6 ay",ay12:"Son 12 ay",yil:"Yıl başından bugüne",tum:"Tüm hareketler"};
 const EM_KAPSAM={bakiyeli:"Bakiyesi olan müşteriler",borclu:"Borçlu (B) müşteriler",tumu:"E-postası olan tüm müşteriler"};
 const EM_VARS={konu:"{firma} – Cari hesap ekstreniz ({tarih})",
-  metin:"Sayın {hitap},\n\n{tarih} tarihi itibarıyla firmamız kayıtlarında cari hesabınız {bakiye} bakiye vermektedir. Hesap ekstreniz ektedir.\n\nKayıtlarınızla bir farklılık görürseniz bize bildirmenizi rica ederiz.\n\nSaygılarımızla,\n{firma}",
+  metin:"Sayın {hitap},\n\n{tarih} tarihi itibarıyla firmamız kayıtlarında cari hesabınız {bakiye} bakiye vermektedir. {vadeDurumu} Hesap ekstreniz ektedir.\n\nKayıtlarınızla bir farklılık görürseniz bize bildirmenizi rica ederiz.\n\nSaygılarımızla,\n{firma}",
   donem:"ay3",cc:"",clientId:"",hesap:"",oto:{gun:"",kapsam:"bakiyeli",onaysiz:false,son:""},haric:{}};
 const emAyar = () => { const e=S.data?.ayar?.ekstreMail||{}; return {...clone(EM_VARS),...clone(e),oto:{...EM_VARS.oto,...(e.oto||{})},haric:{...(e.haric||{})}}; };
 function emKaydet(e){ S.data.ayar={...(S.data.ayar||{}),ekstreMail:e}; changed(); }
@@ -2968,8 +3122,13 @@ function emDonemBas(k){ if(k==="tum") return ""; if(k==="yil"){ const y=+TODAY.s
   const n=+String(k).replace("ay","")||3, d=new Date(TODAY+"T12:00:00"); d.setMonth(d.getMonth()-n); d.setDate(d.getDate()+1); return iso(d); }
 const emBakiyeYazi = (b,dv) => Math.abs(b)<0.005?`sıfır (0,00 ${SYM[dv]||dv})`:`${money(Math.abs(b),dv)} ${b>0?"borç":"alacak"}`;
 const emMusteri = c => ["musteri","ikisi"].includes(c.tip);
-function emDegisken(c,son,bas){ const fm=S.ayar?.firma||{};
-  return {hitap:c.yetkili||c.unvan,unvan:c.unvan,yetkili:c.yetkili||"",bakiye:emBakiyeYazi(son,c.doviz),tarih:trDate(TODAY),donem:`${bas?trDate(bas):"başlangıç"} – ${trDate(TODAY)}`,firma:fm.unvan||""}; }
+// borç durumu (bugün itibarıyla, tüm hareketlerden): vadesi geçmiş / gelmemiş açık kalemler ve toplam borç
+function emVade(c){ const d=S.D.cari.get(c.id), top=r2(Math.max(0,d?.bak||0)); let gec=0;
+  if(top>0) for(const k of d.acik) if(k.yon==="b"&&(!k.vade||k.vade<TODAY)) gec+=k.acik;
+  gec=r2(Math.min(gec,top)); return {top,gec,gel:r2(top-gec),alacak:r2(Math.max(0,-(d?.bak||0)))}; }
+function emDegisken(c,son,bas){ const fm=S.ayar?.firma||{}, V=emVade(c);
+  return {hitap:c.yetkili||c.unvan,unvan:c.unvan,yetkili:c.yetkili||"",bakiye:emBakiyeYazi(son,c.doviz),tarih:trDate(TODAY),donem:`${bas?trDate(bas):"başlangıç"} – ${trDate(TODAY)}`,firma:fm.unvan||"",
+    vadesiGecmis:money(V.gec,c.doviz),vadesiGelmemis:money(V.gel,c.doviz),toplamBorc:money(V.top,c.doviz)}; }
 const emDoldur = (t,v) => String(t||"").replace(/\{(\w+)\}/g,(x,k)=>k in v?v[k]:x);
 const emAdaylar = (kapsam) => sortedCariler().filter(emMusteri).map(c=>({c,bak:S.D.cari.get(c.id).bak}))
   .filter(({c,bak})=>kapsam==="tumu"||(kapsam==="borclu"?bak>0.004:Math.abs(bak)>0.004));
@@ -3097,6 +3256,27 @@ function emMime({kime,cc,konu,html,dosya,pdf,ekler}){ ekler=ekler||[{dosya,veri:
     `Subject: ${mimeH(konu)}`,"MIME-Version: 1.0",`Content-Type: multipart/mixed; boundary="${sn}"`].filter(Boolean);
   return [...bas,"",`--${sn}`,"Content-Type: text/html; charset=UTF-8","Content-Transfer-Encoding: base64","",mimeSatir(b64s(html)),
     ...ekler.flatMap(e=>[`--${sn}`,`Content-Type: ${e.tip||"application/octet-stream"}; name="${mimeH(e.dosya)}"`,"Content-Transfer-Encoding: base64",`Content-Disposition: attachment; filename="${mimeH(e.dosya)}"`,"",mimeSatir(b64(e.veri))]),`--${sn}--`,""].join("\r\n"); }
+function emBorcSatir(c){ const V=emVade(c), dv=c.doviz;
+  return V.top>0?`${trDate(TODAY)} itibarıyla borç durumunuz:\nVadesi geçmiş borcunuz: ${money(V.gec,dv)}\nVadesi gelmemiş borcunuz: ${money(V.gel,dv)}\nToplam borcunuz: ${money(V.top,dv)}`
+    :`${trDate(TODAY)} itibarıyla firmamıza borcunuz bulunmamaktadır.${V.alacak>0?` Firmamızdaki alacak bakiyeniz: ${money(V.alacak,dv)}.`:""}`; }
+// bakiye cümlesinin ardına eklenen vade cümlesi
+function emVadeCumle(c){ const V=emVade(c), dv=c.doviz;
+  if(!(V.top>0)) return "";
+  if(V.gec>0&&V.gel>0) return `Borcunuzun ${money(V.gec,dv)} tutarındaki kısmının vadesi geçmiş olup kalan ${money(V.gel,dv)} tutarındaki kısmının vadesi henüz gelmemiştir.`;
+  if(V.gec>0) return "Borcunuzun tamamının vadesi geçmiş bulunmaktadır.";
+  return "Vadesi geçmiş borcunuz bulunmamaktadır."; }
+// şablonda {vadeDurumu} varsa oraya; yoksa "…vermektedir." cümlesinin hemen ardına yazılır
+function emMetin(sablon,v,c){ const t=emDoldur(sablon,{...v,vadeDurumu:emVadeCumle(c)}); if(/\{vadeDurumu\}/.test(sablon)) return t.replace(/ {2,}/g," ");
+  const vc=emVadeCumle(c); if(!vc) return t;
+  const m=t.match(/vermektedir\./i); if(m) return t.slice(0,m.index+m[0].length)+" "+vc+t.slice(m.index+m[0].length);
+  const i=t.search(/Hesap ekstreniz ektedir/i); if(i>=0) return t.slice(0,i)+vc+" "+t.slice(i);
+  return t.replace(/\s*$/,"")+"\n\n"+vc; }
+function emBorcMetni(c){ const V=emVade(c), dv=c.doviz;
+  if(V.top>0) return `<p style="margin:16px 0 0;padding:12px 14px;background:#f6f8f9;border-left:3px solid #1c5a78"><b>${trDate(TODAY)} itibarıyla borç durumunuz:</b><br>
+    Vadesi geçmiş borcunuz: <b style="color:${V.gec>0?"#b3261e":"inherit"}">${esc(money(V.gec,dv))}</b><br>
+    Vadesi gelmemiş borcunuz: <b>${esc(money(V.gel,dv))}</b><br>
+    Toplam borcunuz: <b>${esc(money(V.top,dv))}</b></p>`;
+  return `<p style="margin:16px 0 0;padding:12px 14px;background:#f6f8f9;border-left:3px solid #1c5a78"><b>${trDate(TODAY)} itibarıyla</b> firmamıza borcunuz bulunmamaktadır.${V.alacak>0?` Firmamızdaki alacak bakiyeniz: <b>${esc(money(V.alacak,dv))}</b>.`:""}</p>`; }
 function emGovde(metin,c,son,bas){ const fm=S.ayar?.firma||{};
   return `<div style="font:14px/1.6 Arial,Helvetica,sans-serif;color:#14232b;max-width:640px">${esc(metin).replace(/\n/g,"<br>")}
   <table style="margin-top:18px;border-collapse:collapse;font-size:13px;min-width:320px"><tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Cari</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2"><b>${esc(c.unvan)}</b> (${esc(c.kod)})</td></tr>
@@ -3105,7 +3285,7 @@ function emGovde(metin,c,son,bas){ const fm=S.ayar?.firma||{};
   <p style="color:#8a9aa2;font-size:11px;margin-top:20px">${esc(fm.unvan||"")}${fm.tel?" · "+esc(fm.tel):""}${fm.eposta?" · "+esc(fm.eposta):""}<br>Bu e-posta SKYPRO ön muhasebe programından gönderilmiştir. Ekstre PDF olarak ektedir.</p></div>`; }
 async function emIleti(id,A,ozel={}){ const c=S.cariler.get(id), bas=ozel.bas!==undefined?ozel.bas:emDonemBas(A.donem), e=ekstreRows(id,bas,""), v=emDegisken(c,e.son,bas);
   const pdf=await ekstrePDF(id,bas,"");
-  return {c,son:e.son,bas,kime:ozel.kime??c.eposta??"",cc:ozel.cc??A.cc,konu:ozel.konu??emDoldur(A.konu,v),html:emGovde(ozel.metin??emDoldur(A.metin,v),c,e.son,bas),dosya:`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,pdf}; }
+  return {c,son:e.son,bas,kime:ozel.kime??c.eposta??"",cc:ozel.cc??A.cc,konu:ozel.konu??emDoldur(A.konu,v),html:emGovde(ozel.metin??emMetin(A.metin,v,c),c,e.son,bas),dosya:`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,pdf}; }
 function emLog(x){ const L=S.data.ekstreMailLog||(S.data.ekstreMailLog={}); L[uid("em")]={at:new Date().toISOString(),by:S.me||null,hesap:GM.email||"",...x};
   const k=Object.keys(L); if(k.length>3000) for(const id of k.sort((a,b)=>L[a].at.localeCompare(L[b].at)).slice(0,k.length-3000)) delete L[id]; }
 async function emGonderBir(id,A,ozel,oto){ const m=await emIleti(id,A,ozel);
@@ -3124,12 +3304,12 @@ function emTekModal(id){ if(emClientId()) GM.yukle().catch(()=>{}); // Google ar
     <div class="f"><label for="em_cc">Bilgi (CC)</label><input type="text" id="em_cc" value="${esc(A.cc||"")}" placeholder="İsteğe bağlı"></div>
     <div class="f"><label for="em_d">Ekstre dönemi</label><select id="em_d">${Object.entries(EM_DONEM).map(([k,t])=>`<option value="${k}" ${A.donem===k&&!ekran?"selected":""}>${t}</option>`).join("")}${ekran?`<option value="ekran" selected>Ekrandaki aralık (${f.bas?trDate(f.bas):"başlangıç"} – ${f.bit?trDate(f.bit):"bugün"})</option>`:""}</select></div>
     <div class="f w"><label for="em_s">Konu</label><input type="text" id="em_s" value="${esc(emDoldur(A.konu,v))}" required></div>
-    <div class="f w"><label for="em_m">Metin</label><textarea id="em_m" rows="8">${esc(emDoldur(A.metin,v))}</textarea><span class="hint">Mailin altına cari, dönem ve kapanış bakiyesi tablosu eklenir; ekstre PDF olarak ektedir.</span></div>
+    <div class="f w"><label for="em_m">Metin</label><textarea id="em_m" rows="12">${esc(emMetin(A.metin,v,c))}</textarea><span class="hint">Borcun vadesi geçmiş ve gelmemiş kısmı bakiye cümlesinin ardına yazıldı; dilerseniz düzenleyin. Mailin altına cari, dönem ve kapanış bakiyesi tablosu eklenir; ekstre PDF olarak ektedir.</span></div>
     <div class="f w small muted" id="emDurum">${GM.hazir()?`Gönderen: <b>${esc(GM.email||"bağlı Gmail hesabı")}</b>`:`Gönder'e bastığınızda Google penceresi açılır; firmanın Gmail hesabıyla izin verin${A.hesap?` (son kullanılan: ${esc(A.hesap)})`:""}.`}</div>
     <p class="err" id="mErr" hidden></p></form>`,
     `<button class="btn" type="button" id="emPdf">PDF'i önizle</button><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="emF" id="emGo" data-w ${emClientId()?"":"disabled"}>Gönder</button></div>`);
   const ozel=()=>{ const d=$("#em_d").value; return {bas:d==="ekran"?f.bas||"":emDonemBas(d),kime:$("#em_k").value.trim(),cc:$("#em_cc").value.trim(),konu:$("#em_s").value.trim(),metin:$("#em_m").value}; };
-  $("#em_d").addEventListener("change",()=>{ const o=ozel(), v2=emDegisken(c,ekstreRows(id,o.bas,"").son,o.bas); const t=$("#em_m"); if(!t.dataset.el) t.value=emDoldur(A.metin,v2); });
+  $("#em_d").addEventListener("change",()=>{ const o=ozel(), v2=emDegisken(c,ekstreRows(id,o.bas,"").son,o.bas); const t=$("#em_m"); if(!t.dataset.el) t.value=emMetin(A.metin,v2,c); });
   $("#em_m").addEventListener("input",e=>e.target.dataset.el="1");
   $("#emPdf").addEventListener("click",async()=>{ const o=ozel(); const pdf=await ekstrePDF(id,o.bas,""), u=URL.createObjectURL(new Blob([pdf],{type:"application/pdf"}));
     if(!window.open(u,"_blank")) saveFile(`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,new Blob([pdf],{type:"application/pdf"})); setTimeout(()=>URL.revokeObjectURL(u),120000); });
@@ -3211,7 +3391,7 @@ function emPanel(){ const A=emAyar(), dis=S.canWrite?"":"disabled";
     ${GOOGLE_CLIENT_ID?"":`<div class="f w"><label for="em_cid">Google istemci kimliği (OAuth Client ID)</label><input type="text" id="em_cid" name="clientId" value="${esc(A.clientId||"")}" placeholder="1234567890-xxxx.apps.googleusercontent.com" ${S.canEdit?"":"disabled"}><span class="hint">Bir kez kurulur; mali müşavirinizden alın.</span></div>`}
     <div class="f w"><label for="em_ak">Konu</label><input type="text" id="em_ak" name="konu" value="${esc(A.konu)}" ${dis}></div>
     <div class="f w"><label for="em_am">Metin</label><textarea id="em_am" name="metin" rows="7" ${dis}>${esc(A.metin)}</textarea>
-      <span class="hint">Kullanılabilecek alanlar: {hitap} (yetkili, yoksa ünvan) · {unvan} · {yetkili} · {bakiye} (örn. 12.500,00 ₺ borç) · {tarih} · {donem} · {firma}</span></div>
+      <span class="hint">Kullanılabilecek alanlar: {hitap} (yetkili, yoksa ünvan) · {unvan} · {yetkili} · {bakiye} (örn. 12.500,00 ₺ borç) · {vadeDurumu} (örn. "Borcunuzun 7.000,00 ₺ tutarındaki kısmının vadesi geçmiş…") · {vadesiGecmis} · {vadesiGelmemis} · {toplamBorc} · {tarih} · {donem} · {firma}<br>Şablonda {vadeDurumu} yoksa vade cümlesi "…bakiye vermektedir." cümlesinin hemen ardına kendiliğinden yazılır.</span></div>
     ${WA_ACIK?"":"<!--"}<div class="f w"><label for="em_wa">WhatsApp mesajı</label><textarea id="em_wa" name="waMetin" rows="5" ${dis}>${esc(A.waMetin||WA_VARS)}</textarea><span class="hint">Aynı alanlar kullanılır. *yıldız arası* WhatsApp'ta kalın görünür. WhatsApp gönderimi her mesajda sizin onayınızla yapılır; otomatik gönderim yalnızca e-postada vardır.</span></div>${WA_ACIK?"":"-->"}
     <div class="f"><label for="em_acc">Her maile bilgi (CC)</label><input type="text" id="em_acc" name="cc" value="${esc(A.cc)}" placeholder="İsteğe bağlı, örn. muhasebe adresi" ${dis}></div>
     <div class="f"><label for="em_ad">Ekstre dönemi</label><select id="em_ad" name="donem" ${dis}>${Object.entries(EM_DONEM).map(([k,t])=>`<option value="${k}" ${A.donem===k?"selected":""}>${t}</option>`).join("")}</select></div>
@@ -3319,6 +3499,7 @@ function tmEsle(c,K,yil){ const el=tmAyar().klasor[`${yil}|${c.id}`]; if(el) ret
   return K.find(f=>tmNorm(f.name.replace(/\d{10,11}/g,""))===u)||K.find(f=>tmNorm(f.name).startsWith(u+" "))||null; }
 // dosya adından dönem: "09-2026", "07.09-2026" (3 aylık), "3. DÖNEM" (çeyrek; yıl addan ya da kök klasörden)
 function tmDonem(ad,yil){ const u=String(ad).toLocaleUpperCase("tr"); let m;
+  if((m=u.match(/(?:^|\D)(\d{2})(\d{2})(20\d{2})-(\d{2})(\d{2})(20\d{2})(?!\d)/))) return {bas:`${m[3]}-${m[2]}`,bit:`${m[6]}-${m[5]}`}; // GİB e-beyanname: ..._01102026-31102026.xml_TKH.pdf
   if((m=u.match(/(?:^|\D)(\d{2})\.(\d{2})-(\d{4})(?!\d)/))) return {bas:`${m[3]}-${m[1]}`,bit:`${m[3]}-${m[2]}`};
   if((m=u.match(/(?:^|\D)(\d{2})-(\d{4})(?!\d)/))&&+m[1]>=1&&+m[1]<=12) return {bas:`${m[2]}-${m[1]}`,bit:`${m[2]}-${m[1]}`};
   if((m=u.match(/(?:^|\D)(20\d{2})(0[1-9]|1[0-2])(?!\d)/))) return {bas:`${m[1]}-${m[2]}`,bit:`${m[1]}-${m[2]}`}; // e-Bildirge: ..._202609_..._THK.pdf
@@ -3327,7 +3508,7 @@ function tmDonem(ad,yil){ const u=String(ad).toLocaleUpperCase("tr"); let m;
 // dosya türü: tahakkuk (TAHAKKUK/THK), hizmet listesi (HZM, HİZMET, APHB, LİSTE… — SGK klasöründe), türü anlaşılamayan SGK belgesi (işaretsiz önerilir)
 const tmTur = f => { const u=f.name.toLocaleUpperCase("tr").replace(/\.PDF$/,"").replace(/_/g," ").trim(), y=(f.yol||"").toLocaleUpperCase("tr"), sgk=/SGK/.test(y+" "+u);
   const tok=k=>new RegExp(`(^|[^A-ZÇĞİÖŞÜ])${k}($|[^A-ZÇĞİÖŞÜ])`).test(u)||u.endsWith(k);
-  if(/TAHAKKUK/.test(u)||tok("THK")) return "tahakkuk";
+  if(/TAHAKKUK/.test(u)||tok("THK")||tok("TKH")) return "tahakkuk"; // GİB: _THK / _TKH = tahakkuk, _BYN = beyanname
   if(!sgk) return null;
   if(tok("ÖDM")||tok("ODM")||/B[İI]LD[İI]RGE|D[İI]LEKÇE|BEYANNAME|SÖZLEŞME|DEKONT|MAKBUZ/.test(u)) return null; // ödeme, giriş/çıkış bildirgesi vb. gönderilmez
   if(tok("HZM")||/H[İI]ZMET|APHB|PR[İI]M\s*B[EİI]LGE|L[İI]STE|DÖKÜM/.test(u)) return "hizmet";
@@ -3346,7 +3527,7 @@ async function tmCariTara(c,ay){ const yil=ay.slice(0,4), K=await tmMusteriKlaso
   const L=await tmTara(k.id), pBas=ayKaydir(ay,1)+"-01", pBit=aySonu(ayKaydir(ay,2)), d=[];
   for(const f of L){ const tur=tmTur(f)||"diger", dn=tmDonem(f.name,yil), donemsel=TM_DONEMSEL.test(tmNorm(f.yol)+" "+tmNorm(f.name)), t=(f.createdTime||f.modifiedTime||"").slice(0,10), pencere=t>=pBas&&t<=pBit;
     const onerilen=tur==="tahakkuk"||tur==="hizmet";
-    if(!onerilen&&/BEYANNAME|D[İI]LEKÇE/.test(f.name.toLocaleUpperCase("tr"))) continue; // beyanname ve dilekçeler listelenmez
+    if(!onerilen&&(/BEYANNAME|D[İI]LEKÇE/.test(f.name.toLocaleUpperCase("tr"))||/(^|[^A-ZÇĞİÖŞÜ])BYN($|[^A-ZÇĞİÖŞÜ])/.test(f.name.toLocaleUpperCase("tr").replace(/\.PDF$/,"").replace(/_/g," ")))) continue; // beyanname (BYN) ve dilekçeler listelenmez
     if(dn&&dn.bit===ay) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:onerilen,boyut:+f.size||0});
     else if(!dn&&pencere&&(donemsel||tur!=="diger")) d.push({id:f.id,ad:f.name,yol:f.yol,tur,sec:onerilen&&donemsel,belirsiz:true,boyut:+f.size||0}); }
   const sira={tahakkuk:0,hizmet:1,sgk:2,diger:3}; d.sort((a,b)=>(a.yol||"").localeCompare(b.yol||"","tr")||sira[a.tur]-sira[b.tur]||a.ad.localeCompare(b.ad,"tr"));
@@ -4670,7 +4851,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.16.1";
+const SURUM="1.17.1";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
