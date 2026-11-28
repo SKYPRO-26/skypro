@@ -3277,21 +3277,81 @@ function emBorcMetni(c){ const V=emVade(c), dv=c.doviz;
     Vadesi gelmemiş borcunuz: <b>${esc(money(V.gel,dv))}</b><br>
     Toplam borcunuz: <b>${esc(money(V.top,dv))}</b></p>`;
   return `<p style="margin:16px 0 0;padding:12px 14px;background:#f6f8f9;border-left:3px solid #1c5a78"><b>${trDate(TODAY)} itibarıyla</b> firmamıza borcunuz bulunmamaktadır.${V.alacak>0?` Firmamızdaki alacak bakiyeniz: <b>${esc(money(V.alacak,dv))}</b>.`:""}</p>`; }
-function emGovde(metin,c,son,bas){ const fm=S.ayar?.firma||{};
+// fatura eklenince: "Hesap ekstreniz ektedir." → "Faturalarınız ve hesap ekstreniz ektedir."; konu da buna göre
+function emEkMetin(t,n){ if(!n) return t; const y=`${n===1?"Faturanız":`${n} adet faturanız`} ve hesap ekstreniz ektedir.`;
+  return /Hesap ekstreniz ektedir\./i.test(t)?t.replace(/Hesap ekstreniz ektedir\./i,y):t.replace(/\s*$/,"")+"\n\n"+y; }
+const emEkKonu = (t,n) => !n?t:/Cari hesap ekstreniz/i.test(t)?t.replace(/Cari hesap ekstreniz/i,"Faturalarınız ve cari hesap ekstreniz"):t+" – faturalar ve ekstre";
+function emGovde(metin,c,son,bas,nf=0){ const fm=S.ayar?.firma||{};
   return `<div style="font:14px/1.6 Arial,Helvetica,sans-serif;color:#14232b;max-width:640px">${esc(metin).replace(/\n/g,"<br>")}
   <table style="margin-top:18px;border-collapse:collapse;font-size:13px;min-width:320px"><tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Cari</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2"><b>${esc(c.unvan)}</b> (${esc(c.kod)})</td></tr>
   <tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Dönem</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2">${bas?trDate(bas):"başlangıç"} – ${trDate(TODAY)}</td></tr>
   <tr><td style="padding:6px 12px;background:#eaf0f2;color:#5a6c75">Kapanış bakiyesi</td><td style="padding:6px 12px;border-bottom:1px solid #d6dfe2"><b>${esc(emBakiyeYazi(son,c.doviz))}</b></td></tr></table>
-  <p style="color:#8a9aa2;font-size:11px;margin-top:20px">${esc(fm.unvan||"")}${fm.tel?" · "+esc(fm.tel):""}${fm.eposta?" · "+esc(fm.eposta):""}<br>Bu e-posta SKYPRO ön muhasebe programından gönderilmiştir. Ekstre PDF olarak ektedir.</p></div>`; }
+  <p style="color:#8a9aa2;font-size:11px;margin-top:20px">${esc(fm.unvan||"")}${fm.tel?" · "+esc(fm.tel):""}${fm.eposta?" · "+esc(fm.eposta):""}<br>Bu e-posta SKYPRO ön muhasebe programından gönderilmiştir. ${nf?"Faturalar ve ekstre":"Ekstre"} PDF olarak ektedir.</p></div>`; }
 async function emIleti(id,A,ozel={}){ const c=S.cariler.get(id), bas=ozel.bas!==undefined?ozel.bas:emDonemBas(A.donem), e=ekstreRows(id,bas,""), v=emDegisken(c,e.son,bas);
-  const pdf=await ekstrePDF(id,bas,"");
-  return {c,son:e.son,bas,kime:ozel.kime??c.eposta??"",cc:ozel.cc??A.cc,konu:ozel.konu??emDoldur(A.konu,v),html:emGovde(ozel.metin??emMetin(A.metin,v,c),c,e.son,bas),dosya:`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,pdf}; }
+  const pdf=await ekstrePDF(id,bas,""), fat=ozel.faturalar||[], nf=fat.length, dosya=`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`;
+  return {c,son:e.son,bas,kime:ozel.kime??c.eposta??"",cc:ozel.cc??A.cc,konu:ozel.konu??emEkKonu(emDoldur(A.konu,v),nf),html:emGovde(ozel.metin??emEkMetin(emMetin(A.metin,v,c),nf),c,e.son,bas,nf),dosya,pdf,faturalar:fat,
+    ekler:[...fat.map(x=>({dosya:x.ad,veri:x.veri,tip:"application/pdf"})),{dosya,veri:pdf,tip:"application/pdf"}]}; }
+// Gmail'in tarayıcıdan gönderim yolu ~5 MB istekle sınırlı: ekler bu sınırı aşarsa mail (1/2), (2/2)… diye bölünür; ekstre son maildedir
+const EM_PARCA=2.4e6;
+function emParcala(m){ const E=m.ekler, top=E.reduce((s,x)=>s+x.veri.length,0); if(top<=EM_PARCA||E.length<2) return [m];
+  const P=[]; let cur=[], b=0; for(const x of E){ if(cur.length&&b+x.veri.length>EM_PARCA){ P.push(cur); cur=[]; b=0; } cur.push(x); b+=x.veri.length; } if(cur.length) P.push(cur);
+  return P.map((ek,k)=>({...m,ekler:ek,konu:`${m.konu} (${k+1}/${P.length})`})); }
 function emLog(x){ const L=S.data.ekstreMailLog||(S.data.ekstreMailLog={}); L[uid("em")]={at:new Date().toISOString(),by:S.me||null,hesap:GM.email||"",...x};
   const k=Object.keys(L); if(k.length>3000) for(const id of k.sort((a,b)=>L[a].at.localeCompare(L[b].at)).slice(0,k.length-3000)) delete L[id]; }
 async function emGonderBir(id,A,ozel,oto){ const m=await emIleti(id,A,ozel);
   if(!emGecerli(m.kime)) throw new Error("E-posta adresi yok ya da hatalı");
-  try{ await GM.gonder(emMime(m)); emLog({cariId:id,kime:m.kime,cc:m.cc||"",bakiye:r2(m.son),doviz:m.c.doviz,donem:m.bas,durum:"ok",oto:!!oto}); }
-  catch(err){ emLog({cariId:id,kime:m.kime,cc:m.cc||"",bakiye:r2(m.son),doviz:m.c.doviz,donem:m.bas,durum:"hata",hata:String(err.message||err),oto:!!oto}); throw err; } }
+  const L={cariId:id,kime:m.kime,cc:m.cc||"",bakiye:r2(m.son),doviz:m.c.doviz,donem:m.bas,oto:!!oto,...(m.faturalar.length?{faturalar:m.faturalar.map(x=>x.ad)}:{})}, P=emParcala(m);
+  try{ for(let k=0;k<P.length;k++){ try{ await GM.gonder(emMime(P[k])); }catch(e){ throw k?new Error(`${e.message||e} (${P.length} parçalı mailin ${k} tanesi gitti)`):/Gmail 413/.test(e.message||"")?new Error("Ekler Gmail için çok büyük; bazı faturaları çıkarıp tekrar deneyin."):e; } }
+    emLog({...L,durum:"ok",...(P.length>1?{parca:P.length}:{})}); }
+  catch(err){ emLog({...L,durum:"hata",hata:String(err.message||err)}); throw err; } }
+
+/* ---------- fatura PDF'leri: entegratörden indirilen faturalar klasörden okunur, carilere eşlenir, ekstreyle aynı maile eklenir ---------- */
+const FT={liste:[],klasor:""};
+const FT_UUID=/[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g, FT_NO=/[A-Z0-9]{3}20\d{2}\d{9}(?!\d)/g;
+const ftKompakt = s => bkFold(s).replace(/[^A-Z0-9]/g,"");
+const ftBoyut = n => n>=1e6?(n/1e6).toFixed(1).replace(".",",")+" MB":Math.max(1,Math.round(n/1e3))+" KB";
+// PDF içindeki düz yazı + sıkıştırılmış akışlar (ETTN, fatura no, VKN aramak için; okunamayan akışlar atlanır)
+async function ftIcerik(u8){ const dec=new TextDecoder("latin1"), raw=dec.decode(u8); let out=raw.length<6e6?raw:"";
+  if(typeof DecompressionStream!=="function") return out;
+  let i=0, n=0; while(n<80&&out.length<8e6){ const s=raw.indexOf("stream",i); if(s<0) break; let a=s+6; if(raw[a]==="\r") a++; if(raw[a]==="\n") a++;
+    const e=raw.indexOf("endstream",a); if(e<0) break; i=e+9; n++; const bas=raw.slice(Math.max(0,s-400),s);
+    if(!/FlateDecode/.test(bas)||/\/Subtype\s*\/Image|\/FontFile|\/Length1/.test(bas)) continue;
+    const lm=bas.match(/\/Length\s+(\d+)(?!\s+\d+\s+R)/), son=lm&&a+(+lm[1])<=e?a+(+lm[1]):e;
+    try{ const r=new Blob([u8.subarray(a,son)]).stream().pipeThrough(new DecompressionStream("deflate")).getReader();
+      for(;;){ let p; try{ p=await r.read(); }catch{ break; } if(p.done) break; out+=" "+dec.decode(p.value); if(out.length>8e6) break; } }catch{} }
+  return out; }
+function ftIndeks(){ const ettn=new Map(), no=new Map(), vkn=new Map(), kendi=String(S.ayar?.firma?.vkn||"").replace(/\D/g,"");
+  for(const h of S.hareketler){ if(!h.cariId||!S.cariler.has(h.cariId)) continue; if(h.ettn) ettn.set(String(h.ettn).toUpperCase(),h);
+    if(h.belgeNo){ const k=ftKompakt(h.belgeNo); if(k.length>=6&&(!no.has(k)||h.tur==="satis")) no.set(k,h); } }
+  for(const c of S.cariler.values()){ const v=String(c.vkn||"").replace(/\D/g,""); if(v.length>=10&&v!==kendi) vkn.set(v,(vkn.get(v)||[]).concat(c.id)); }
+  const unv=[]; for(const c of S.cariler.values()){ const u=ftNorm(c.unvan), k=ftCekirdek(u); if(u.length>=5) unv.push({id:c.id,u}); if(k!==u&&k.length>=6&&(k.includes(" ")||k.length>=8)) unv.push({id:c.id,u:k}); }
+  return {ettn,no,vkn,unv:unv.sort((a,b)=>b.u.length-a.u.length)}; }
+const ftNorm = s => bkFold(s).replace(/[^A-Z0-9]+/g," ").trim();
+const FT_EK=new Set("LTD STI STI. LIMITED SIRKETI SIRKET AS A S ANONIM SAN SANAYI TIC TICARET VE PAZ PAZARLAMA INS INSAAT ITH IHR ITHALAT IHRACAT DIS".split(" "));
+const ftCekirdek = u => { const w=u.split(" "); while(w.length>1&&FT_EK.has(w[w.length-1])) w.pop(); return w.join(" "); };
+// eşleme sırası: ETTN → fatura no → VKN/TCKN → ünvan (dosya adında); sonra aynısı PDF içeriğinde
+function ftBul(metin,I,adMi){ const U=String(metin).toUpperCase();
+  for(const u of U.match(FT_UUID)||[]){ const h=I.ettn.get(u); if(h) return {cariId:h.cariId,h,yol:"ETTN"}; }
+  for(const f of U.match(FT_NO)||[]){ const h=I.no.get(f); if(h) return {cariId:h.cariId,h,yol:"fatura no"}; }
+  if(adMi){ const k=ftKompakt(metin); for(const [b,h] of I.no) if(b.length>=8&&k.includes(b)) return {cariId:h.cariId,h,yol:"fatura no"}; }
+  const vs=new Set(); for(const v of U.match(/(?<!\d)\d{10,11}(?!\d)/g)||[]) for(const id of I.vkn.get(v)||[]) vs.add(id);
+  if(vs.size===1) return {cariId:[...vs][0],yol:"VKN"};
+  if(adMi){ const n=" "+ftNorm(metin.replace(/\.pdf$/i,""))+" "; const x=I.unv.find(x=>n.includes(" "+x.u+" ")); if(x) return {cariId:x.id,yol:"ünvan"}; }
+  return null; }
+async function ftDosyaSec(){ const L=[]; let ad="";
+  if(window.showDirectoryPicker){ let d; try{ d=await showDirectoryPicker({id:"skyfatura",mode:"read"}); }catch(e){ if(e?.name==="AbortError") return null; throw e; } ad=d.name;
+    const gez=async(h,yol,der)=>{ for await(const [n,e] of h.entries()){ if(L.length>=600) return; if(e.kind==="file"&&/\.pdf$/i.test(n)) L.push({ad:n,yol:yol+n,file:await e.getFile()}); else if(e.kind==="directory"&&der<3) await gez(e,yol+n+"/",der+1); } };
+    await gez(d,"",0); }
+  else{ const fs=await new Promise(ok=>{ const i=document.createElement("input"); i.type="file"; i.multiple=true; i.accept=".pdf,application/pdf"; i.webkitdirectory=true; i.onchange=()=>ok([...i.files]); i.click(); });
+    for(const f of fs) if(/\.pdf$/i.test(f.name)) L.push({ad:f.name,yol:f.webkitRelativePath||f.name,file:f}); ad=(L[0]?.yol||"").split("/")[0]||"seçilen dosyalar"; }
+  return {ad,L}; }
+async function ftOku(L,ilerleme){ const I=ftIndeks(), out=[];
+  for(let k=0;k<L.length;k++){ const x=L[k]; ilerleme?.(k,L.length); const veri=new Uint8Array(await x.file.arrayBuffer());
+    let r=ftBul(x.ad,I,true); if(!r){ try{ r=ftBul(await ftIcerik(veri),I,false); if(r) r.yol+=" (PDF içeriği)"; }catch{} }
+    out.push({ad:x.ad,yol:x.yol,veri,boyut:veri.length,cariId:r?.cariId||"",h:r?.h||null,esle:r?.yol||"",sec:!!r}); }
+  return out; }
+const ftCariFat = id => FT.liste.filter(x=>x.cariId===id&&x.sec);
+const ftAciklama = x => x.h?[x.h.belgeNo,x.h.tarih&&trDate(x.h.tarih),x.h.tutar&&money(x.h.tutar,x.h.doviz)].filter(Boolean).join(" · "):"";
 
 /* tek cariye gönderim */
 function emTekModal(id){ if(emClientId()) GM.yukle().catch(()=>{}); // Google aracı önceden yüklenir: tıklamada izin penceresi engellenmesin
@@ -3305,12 +3365,17 @@ function emTekModal(id){ if(emClientId()) GM.yukle().catch(()=>{}); // Google ar
     <div class="f"><label for="em_d">Ekstre dönemi</label><select id="em_d">${Object.entries(EM_DONEM).map(([k,t])=>`<option value="${k}" ${A.donem===k&&!ekran?"selected":""}>${t}</option>`).join("")}${ekran?`<option value="ekran" selected>Ekrandaki aralık (${f.bas?trDate(f.bas):"başlangıç"} – ${f.bit?trDate(f.bit):"bugün"})</option>`:""}</select></div>
     <div class="f w"><label for="em_s">Konu</label><input type="text" id="em_s" value="${esc(emDoldur(A.konu,v))}" required></div>
     <div class="f w"><label for="em_m">Metin</label><textarea id="em_m" rows="12">${esc(emMetin(A.metin,v,c))}</textarea><span class="hint">Borcun vadesi geçmiş ve gelmemiş kısmı bakiye cümlesinin ardına yazıldı; dilerseniz düzenleyin. Mailin altına cari, dönem ve kapanış bakiyesi tablosu eklenir; ekstre PDF olarak ektedir.</span></div>
+    <div class="f w"><label for="em_ft">Fatura ekle (isteğe bağlı)</label><input type="file" id="em_ft" accept=".pdf,application/pdf" multiple><span class="hint" id="em_ftH">Entegratörden indirdiğiniz fatura PDF'lerini seçin; ekstreyle aynı maile, ekstreden önce eklenir.</span></div>
     <div class="f w small muted" id="emDurum">${GM.hazir()?`Gönderen: <b>${esc(GM.email||"bağlı Gmail hesabı")}</b>`:`Gönder'e bastığınızda Google penceresi açılır; firmanın Gmail hesabıyla izin verin${A.hesap?` (son kullanılan: ${esc(A.hesap)})`:""}.`}</div>
     <p class="err" id="mErr" hidden></p></form>`,
     `<button class="btn" type="button" id="emPdf">PDF'i önizle</button><div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn pri" type="submit" form="emF" id="emGo" data-w ${emClientId()?"":"disabled"}>Gönder</button></div>`);
-  const ozel=()=>{ const d=$("#em_d").value; return {bas:d==="ekran"?f.bas||"":emDonemBas(d),kime:$("#em_k").value.trim(),cc:$("#em_cc").value.trim(),konu:$("#em_s").value.trim(),metin:$("#em_m").value}; };
-  $("#em_d").addEventListener("change",()=>{ const o=ozel(), v2=emDegisken(c,ekstreRows(id,o.bas,"").son,o.bas); const t=$("#em_m"); if(!t.dataset.el) t.value=emMetin(A.metin,v2,c); });
-  $("#em_m").addEventListener("input",e=>e.target.dataset.el="1");
+  let fat=[];
+  const ozel=()=>{ const d=$("#em_d").value; return {bas:d==="ekran"?f.bas||"":emDonemBas(d),kime:$("#em_k").value.trim(),cc:$("#em_cc").value.trim(),konu:$("#em_s").value.trim(),metin:$("#em_m").value,faturalar:fat}; };
+  const yenile=()=>{ const o=ozel(), v2=emDegisken(c,ekstreRows(id,o.bas,"").son,o.bas); const t=$("#em_m"), k=$("#em_s"); if(!t.dataset.el) t.value=emEkMetin(emMetin(A.metin,v2,c),fat.length); if(!k.dataset.el) k.value=emEkKonu(emDoldur(A.konu,v2),fat.length); };
+  $("#em_d").addEventListener("change",yenile);
+  $("#em_m").addEventListener("input",e=>e.target.dataset.el="1"); $("#em_s").addEventListener("input",e=>e.target.dataset.el="1");
+  $("#em_ft").addEventListener("change",async e=>{ fat=[]; for(const fl of e.target.files) fat.push({ad:fl.name,veri:new Uint8Array(await fl.arrayBuffer())});
+    const b=fat.reduce((s,x)=>s+x.veri.length,0); $("#em_ftH").textContent=fat.length?`${fat.length} fatura eklenecek (${ftBoyut(b)})${b>EM_PARCA?" · ekler büyük olduğu için mail parçalara bölünerek gönderilecek":""}.`:"Entegratörden indirdiğiniz fatura PDF'lerini seçin; ekstreyle aynı maile, ekstreden önce eklenir."; yenile(); });
   $("#emPdf").addEventListener("click",async()=>{ const o=ozel(); const pdf=await ekstrePDF(id,o.bas,""), u=URL.createObjectURL(new Blob([pdf],{type:"application/pdf"}));
     if(!window.open(u,"_blank")) saveFile(`Ekstre_${fn(c.unvan)}_${TODAY}.pdf`,new Blob([pdf],{type:"application/pdf"})); setTimeout(()=>URL.revokeObjectURL(u),120000); });
   $("#emF").addEventListener("submit",async e=>{ e.preventDefault(); const o=ozel(), b=$("#emGo");
@@ -3319,15 +3384,18 @@ function emTekModal(id){ if(emClientId()) GM.yukle().catch(()=>{}); // Google ar
     b.disabled=true; b.textContent="Gönderiliyor…"; $("#mErr").hidden=true;
     try{ await gmHazirla(); $("#emDurum").innerHTML=`Gönderen: <b>${esc(GM.email||"Gmail")}</b> · PDF hazırlanıyor ve gönderiliyor…`;
       if($("#em_kay")?.checked&&!c.eposta){ S.data.cariler[id]={...S.data.cariler[id],eposta:o.kime}; }
-      await emGonderBir(id,emAyar(),o,false); closeModal(); changed(); toast(`Ekstre gönderildi: ${o.kime}`); }
+      await emGonderBir(id,emAyar(),o,false); closeModal(); changed(); toast(`${fat.length?`${fat.length} fatura ve ekstre`:"Ekstre"} gönderildi: ${o.kime}`); }
     catch(err){ changed(); b.disabled=false; b.textContent="Tekrar dene"; showErr(err.message||String(err)); } });
 }
 
 /* toplu ve otomatik gönderim */
 function emTopluModal(opt={}){ if(emClientId()) GM.yukle().catch(()=>{});
-  const oto=!!opt.oto, buAy=TODAY.slice(0,7), st={kapsam:emAyar().oto.kapsam||"bakiyeli",calisiyor:false,bitti:null};
-  let secim=null;
-  const ciz=()=>{ const A=emAyar(), L=emAdaylar(st.kapsam), ep=L.filter(x=>emGecerli(x.c.eposta)), yok=L.filter(x=>!emGecerli(x.c.eposta));
+  const oto=!!opt.oto, buAy=TODAY.slice(0,7), st={kapsam:emAyar().oto.kapsam||"bakiyeli",calisiyor:false,bitti:null,acik:new Set(),okuma:""};
+  let secim=null; FT.liste=[]; FT.klasor="";
+  const ciz=()=>{ const A=emAyar(), L=emAdaylar(st.kapsam);
+    if(FT.liste.length){ const var_=new Set(L.map(x=>x.c.id)); for(const id of new Set(FT.liste.map(x=>x.cariId).filter(Boolean))){ const c=S.cariler.get(id); if(c&&!var_.has(id)){ L.push({c,bak:S.D.cari.get(id).bak}); var_.add(id); } } }
+    const ep=L.filter(x=>emGecerli(x.c.eposta)), yok=L.filter(x=>!emGecerli(x.c.eposta));
+    const esm=FT.liste.filter(x=>!x.cariId), ftSay=id=>FT.liste.filter(x=>x.cariId===id), cOpt=sortedCariler().map(c=>`<option value="${c.id}">${esc(c.kod)} · ${esc(c.unvan)}</option>`).join("");
     if(!secim) secim=new Set(ep.filter(x=>!A.haric[x.c.id]).map(x=>x.c.id));
     for(const id of [...secim]) if(!ep.some(x=>x.c.id===id)) secim.delete(id);
     const n=secim.size;
@@ -3336,9 +3404,14 @@ function emTopluModal(opt={}){ if(emClientId()) GM.yukle().catch(()=>{});
       ${oto?`<div class="notice small">Ayarlara göre bu ay ekstreler <b>${A.oto.gun==="son"?"ay sonunda":`ayın ${A.oto.gun}. günü`}</b> gönderilecekti. Listeyi kontrol edip gönderin; işaretini kaldırdığınız müşteriler sonraki otomatik gönderimlerde de seçilmez.</div>`:""}
       <div class="filters" style="align-items:end"><label>Kimlere<select id="emKap" ${st.calisiyor?"disabled":""}>${Object.entries(EM_KAPSAM).map(([k,t])=>`<option value="${k}" ${st.kapsam===k?"selected":""}>${t}</option>`).join("")}</select></label>
         <span class="small muted" style="padding-bottom:8px">Ekstre dönemi: <b>${EM_DONEM[A.donem]}</b> · ${GM.hazir()?`Gönderen: <b>${esc(GM.email||"Gmail")}</b>`:`Gönderirken Google penceresi açılır${A.hesap?` (${esc(A.hesap)})`:""}`}</span></div>
+      <div class="notice small" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0"><span style="flex:1;min-width:240px">📎 ${st.okuma?esc(st.okuma):FT.liste.length?`<b>${FT.liste.length} fatura PDF'i</b> okundu (${esc(FT.klasor)}) · ${FT.liste.length-esm.length} tanesi cariyle eşleşti${esm.length?` · <b style="color:var(--borc)">${esm.length} eşleşmedi</b> (aşağıdan cari seçin)`:""}. Faturalar, ilgili müşterinin ekstre mailine ekstreden önce eklenir.`:"Entegratörden indirdiğiniz fatura PDF'lerini klasörden seçin: her fatura kendi müşterisinin ekstre mailine eklenir. Eşleştirme dosya adındaki ya da PDF içindeki ETTN, fatura no, VKN/TCKN ve ünvana göre yapılır."}</span>
+        <button class="btn sm" id="ftSec" ${st.calisiyor||st.okuma?"disabled":""}>${FT.liste.length?"Başka klasör seç":"Fatura klasörü seç"}</button>${FT.liste.length?`<button class="btn sm" id="ftSadece" ${st.calisiyor?"disabled":""}>Yalnızca faturası olanları seç</button><button class="btn sm" id="ftTemizle" ${st.calisiyor?"disabled":""}>Faturaları kaldır</button>`:""}</div>
+      ${esm.length?`<details ${esm.length<=8?"open":""}><summary class="small"><b>Eşleşmeyen ${esm.length} fatura</b> — hangi cariye ait olduğunu seçin</summary><div class="tw" style="max-height:200px;overflow:auto;margin-top:6px"><table><tbody>${esm.map(x=>`<tr><td class="small">${esc(x.yol)} <span class="muted">${ftBoyut(x.boyut)}</span></td><td style="width:45%"><select data-fte="${FT.liste.indexOf(x)}" ${st.calisiyor?"disabled":""}><option value="">— cari seçin —</option>${cOpt}</select></td></tr>`).join("")}</tbody></table></div></details>`:""}
       ${st.bitti?`<div class="notice ${st.bitti.hata.length?"warn":""} small"><b>${st.bitti.ok} ekstre gönderildi.</b>${st.bitti.hata.length?`<br>${st.bitti.hata.length} gönderilemedi:<br>${st.bitti.hata.map(h=>esc(h)).join("<br>")}`:""}</div>`:""}
-      <div class="tw" style="max-height:380px;overflow:auto"><table><thead><tr><th style="width:30px"><input type="checkbox" id="emHep" ${n&&n===ep.length?"checked":""} aria-label="Tümünü seç" ${st.calisiyor?"disabled":""}></th><th>Müşteri</th><th>E-posta</th><th class="r">Bakiye</th><th>Son gönderim</th><th id="emDurumTh"></th></tr></thead><tbody>
-      ${ep.map(({c,bak})=>{ const s=emSon(c.id); return `<tr><td><input type="checkbox" data-emc="${c.id}" ${secim.has(c.id)?"checked":""} ${st.calisiyor?"disabled":""} aria-label="${esc(c.unvan)}"></td><td class="small">${esc(c.kod)} · ${esc(c.unvan)}</td><td class="small">${esc(c.eposta)}</td><td class="r">${bal(bak,c.doviz)}</td><td class="small muted">${s?emSaat(s.at):"—"}</td><td class="small" data-emd="${c.id}"></td></tr>`; }).join("")||`<tr><td colspan="6" class="empty">Bu kapsamda e-postası olan müşteri yok.</td></tr>`}</tbody></table></div>
+      <div class="tw" style="max-height:380px;overflow:auto"><table><thead><tr><th style="width:30px"><input type="checkbox" id="emHep" ${n&&n===ep.length?"checked":""} aria-label="Tümünü seç" ${st.calisiyor?"disabled":""}></th><th>Müşteri</th><th>E-posta</th><th class="r">Bakiye</th>${FT.liste.length?"<th>Fatura</th>":""}<th>Son gönderim</th><th id="emDurumTh"></th></tr></thead><tbody>
+      ${ep.map(({c,bak})=>{ const s=emSon(c.id), F=ftSay(c.id), fs=F.filter(x=>x.sec).length, ac=st.acik.has(c.id)&&F.length; return `<tr><td><input type="checkbox" data-emc="${c.id}" ${secim.has(c.id)?"checked":""} ${st.calisiyor?"disabled":""} aria-label="${esc(c.unvan)}"></td><td class="small">${esc(c.kod)} · ${esc(c.unvan)}</td><td class="small">${esc(c.eposta)}</td><td class="r">${bal(bak,c.doviz)}</td>${FT.liste.length?`<td class="small">${F.length?`<button class="btn sm" data-fta="${c.id}" title="Eklenecek faturaları gör">${fs}${fs<F.length?"/"+F.length:""} PDF ${ac?"▴":"▾"}</button>`:`<span class="muted">—</span>`}</td>`:""}<td class="small muted">${s?emSaat(s.at):"—"}</td><td class="small" data-emd="${c.id}"></td></tr>
+        ${ac?`<tr><td></td><td colspan="${FT.liste.length?6:5}" style="background:var(--bg)">${F.map(x=>{ const i=FT.liste.indexOf(x); return `<label class="small" style="display:flex;gap:8px;align-items:center;padding:2px 0"><input type="checkbox" data-ftx="${i}" ${x.sec?"checked":""} ${st.calisiyor?"disabled":""}> ${esc(x.yol)} <span class="muted">${ftBoyut(x.boyut)} · ${esc(x.esle)}${x.h?" · "+esc(ftAciklama(x)):""}</span><button type="button" class="btn sm" data-ftk="${i}" style="margin-left:auto" ${st.calisiyor?"disabled":""} title="Bu faturayı başka cariye ata">Başka cari</button></label>`; }).join("")}</td></tr>`:""}`; }).join("")||`<tr><td colspan="7" class="empty">Bu kapsamda e-postası olan müşteri yok.</td></tr>`}</tbody></table></div>
+      ${(()=>{ const y=[...new Set(FT.liste.filter(x=>x.cariId&&!emGecerli(S.cariler.get(x.cariId)?.eposta)).map(x=>x.cariId))]; return y.length?`<div class="notice warn small" style="margin:0">Faturası olan ama e-postası olmayan ${y.length} cari: ${y.map(id=>`<a href="#cari-${id}" data-act="close">${esc(cariAd(id))}</a>`).join(" · ")}. Cari kartına e-posta ekleyin.</div>`:""; })()}
       ${yok.length?`<details><summary class="small muted">E-postası olmayan ${yok.length} müşteri bu listede yok — cari kartlarına e-posta ekleyin</summary><div class="small" style="margin-top:6px">${yok.map(({c})=>`<a href="#cari-${c.id}" data-act="close">${esc(c.unvan)}</a>`).join(" · ")}</div></details>`:""}
       <p class="small muted" style="margin:0" id="emIl"></p></div>`,
       `${oto?`<button class="btn" id="emAtla" ${st.calisiyor?"disabled":""}>Bu ay gönderme</button>`:"<span></span>"}<div class="btns"><button class="btn" data-act="close" ${st.calisiyor?"disabled":""}>${st.bitti?"Kapat":oto?"Daha sonra":"Vazgeç"}</button>${st.bitti&&!st.bitti.hata.length?"":`<button class="btn pri" id="emTGo" data-w ${!n||st.calisiyor||!emClientId()?"disabled":""}>${st.calisiyor?"Gönderiliyor…":st.bitti?"Kalanları tekrar dene":`${n} müşteriye gönder`}</button>`}</div>`);
@@ -3346,12 +3419,25 @@ function emTopluModal(opt={}){ if(emClientId()) GM.yukle().catch(()=>{});
     $("#emKap")?.addEventListener("change",e=>{ st.kapsam=e.target.value; secim=null; ciz(); });
     $("#emHep")?.addEventListener("change",e=>{ for(const x of ep) e.target.checked?secim.add(x.c.id):secim.delete(x.c.id); ciz(); });
     document.querySelectorAll("[data-emc]").forEach(k=>k.addEventListener("change",()=>{ k.checked?secim.add(k.dataset.emc):secim.delete(k.dataset.emc); const b=$("#emTGo"); if(b&&!st.bitti){ b.textContent=`${secim.size} müşteriye gönder`; b.disabled=!secim.size; } const h=$("#emHep"); if(h) h.checked=secim.size===ep.length; }));
+    $("#ftSec")?.addEventListener("click",async()=>{ let r; try{ r=await ftDosyaSec(); }catch(err){ return toast("Klasör okunamadı: "+(err.message||err)); } if(!r) return;
+      if(!r.L.length) return toast("Seçilen klasörde PDF bulunamadı. Entegratör ZIP indirdiyse önce ZIP'i klasöre çıkarın.");
+      st.okuma=`${r.L.length} PDF okunuyor…`; ciz();
+      try{ FT.liste=await ftOku(r.L,(k,t)=>{ const el=$("#emIl"); if(el) el.textContent=`Faturalar okunuyor: ${k+1} / ${t}`; }); FT.klasor=r.ad; }catch(err){ toast("Faturalar okunamadı: "+(err.message||err)); }
+      st.okuma=""; const fc=new Set(FT.liste.filter(x=>x.cariId).map(x=>x.cariId)); secim=new Set([...fc].filter(id=>emGecerli(S.cariler.get(id)?.eposta))); ciz();
+      const el=$("#emIl"); if(el) el.textContent=`${FT.liste.length} fatura okundu · faturası olan ${secim.size} müşteri seçildi. Başkalarına da ekstre göndermek isterseniz işaretleyin.`; });
+    $("#ftSadece")?.addEventListener("click",()=>{ secim=new Set(ep.filter(x=>ftCariFat(x.c.id).length).map(x=>x.c.id)); ciz(); });
+    $("#ftTemizle")?.addEventListener("click",()=>{ FT.liste=[]; FT.klasor=""; st.acik.clear(); secim=null; ciz(); });
+    document.querySelectorAll("[data-fta]").forEach(b=>b.addEventListener("click",()=>{ const id=b.dataset.fta; st.acik.has(id)?st.acik.delete(id):st.acik.add(id); ciz(); }));
+    document.querySelectorAll("[data-ftx]").forEach(k=>k.addEventListener("change",()=>{ FT.liste[+k.dataset.ftx].sec=k.checked; ciz(); }));
+    document.querySelectorAll("[data-ftk]").forEach(b=>b.addEventListener("click",()=>{ const x=FT.liste[+b.dataset.ftk]; x.cariId=""; x.h=null; x.esle=""; x.sec=false; ciz(); }));
+    document.querySelectorAll("[data-fte]").forEach(sl=>sl.addEventListener("change",()=>{ const x=FT.liste[+sl.dataset.fte]; if(!sl.value) return; x.cariId=sl.value; x.esle="elle seçildi"; x.sec=true; x.h=null;
+      if(emGecerli(S.cariler.get(x.cariId)?.eposta)) secim?.add(x.cariId); ciz(); }));
     $("#emAtla")?.addEventListener("click",()=>{ const A2=emAyar(); A2.oto.son=buAy; emKaydet(A2); closeModal(); toast(`${ayTam(buAy)} otomatik ekstre gönderimi atlandı`); });
     $("#emTGo")?.addEventListener("click",async()=>{ const ids=ep.map(x=>x.c.id).filter(id=>secim.has(id)); if(!ids.length) return;
-      const A2=emAyar(); for(const x of ep) if(secim.has(x.c.id)) delete A2.haric[x.c.id]; else A2.haric[x.c.id]=true; emKaydet(A2);
+      if(!FT.liste.length){ const A2=emAyar(); for(const x of ep) if(secim.has(x.c.id)) delete A2.haric[x.c.id]; else A2.haric[x.c.id]=true; emKaydet(A2); } // faturalı gönderimde otomatik gönderim listesi değişmez
       st.calisiyor=true; ciz(); const il=$("#emIl"), b=$("#emTGo");
       try{ await gmHazirla(); } catch(err){ st.calisiyor=false; ciz(); $("#emIl").innerHTML=`<span style="color:var(--borc)">${esc(err.message)}</span>`; return; }
-      const r=await emTopluGonder(ids,{oto,ilerleme:(i,t,c,d)=>{ const el=document.querySelector(`[data-emd="${c.id}"]`); if(el) el.innerHTML=d==="ok"?`<span style="color:var(--alacak)">✓ gönderildi</span>`:d==="hata"?`<span style="color:var(--borc)">hata</span>`:"gönderiliyor…";
+      const r=await emTopluGonder(ids,{oto,ozel:id=>({faturalar:ftCariFat(id)}),ilerleme:(i,t,c,d)=>{ const el=document.querySelector(`[data-emd="${c.id}"]`); if(el) el.innerHTML=d==="ok"?`<span style="color:var(--alacak)">✓ gönderildi</span>`:d==="hata"?`<span style="color:var(--borc)">hata</span>`:"gönderiliyor…";
         if($("#emIl")) $("#emIl").textContent=`${Math.min(i+1,t)} / ${t} · ${c.unvan}`; }});
       st.calisiyor=false; st.bitti=r; secim=new Set(r.hataIds);
       if(oto&&r.ok){ const A3=emAyar(); A3.oto.son=buAy; emKaydet(A3); }
@@ -3359,9 +3445,9 @@ function emTopluModal(opt={}){ if(emClientId()) GM.yukle().catch(()=>{});
   };
   ciz();
 }
-async function emTopluGonder(ids,{oto=false,ilerleme}={}){ const A=emAyar(); let ok=0; const hata=[], hataIds=[];
+async function emTopluGonder(ids,{oto=false,ilerleme,ozel}={}){ const A=emAyar(); let ok=0; const hata=[], hataIds=[];
   for(let i=0;i<ids.length;i++){ const c=S.cariler.get(ids[i]); if(!c) continue; ilerleme?.(i,ids.length,c,"");
-    try{ await emGonderBir(c.id,A,{},oto); ok++; ilerleme?.(i,ids.length,c,"ok"); }
+    try{ await emGonderBir(c.id,A,ozel?.(c.id)||{},oto); ok++; ilerleme?.(i,ids.length,c,"ok"); }
     catch(err){ hata.push(`${c.unvan}: ${err.message||err}`); hataIds.push(c.id); ilerleme?.(i,ids.length,c,"hata"); if(/^Gmail 40[13]/.test(err.message||"")&&!GM.hazir()) break; } }
   changed(); return {ok,hata,hataIds}; }
 function emOtoTarih(gun,ay){ return gun==="son"?aySonu(ay):ayGunT(ay,Math.min(+gun,+aySonu(ay).slice(8))); }
@@ -3378,7 +3464,7 @@ async function emOtoKontrol(){
 }
 function emGecmisModal(){ const L=Object.values(S.data?.ekstreMailLog||{}).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,300);
   modal("Ekstre gönderim geçmişi",`<div class="tw" style="max-height:70vh;overflow:auto"><table><thead><tr><th>Tarih</th><th>Cari</th><th>Kime</th><th class="r">Bakiye</th><th>Durum</th><th>Gönderen</th></tr></thead><tbody>
-    ${L.map(x=>`<tr><td class="mono small">${emSaat(x.at)}</td><td class="small">${esc(cariAd(x.cariId))}</td><td class="small">${x.kanal==="whatsapp"?"💬 ":x.kanal==="tahakkuk"?"🧾 ":"📧 "}${esc(x.kime)}${x.kanal==="tahakkuk"?`<div class="muted">${esc(ayTam(x.donem))} tahakkukları: ${esc((x.dosyalar||[]).join(", "))}</div>`:""}${x.cc?`<div class="muted">cc: ${esc(x.cc)}</div>`:""}</td><td class="r small">${x.kanal==="tahakkuk"?"":esc(emBakiyeYazi(x.bakiye,x.doviz||"TRY"))}</td>
+    ${L.map(x=>`<tr><td class="mono small">${emSaat(x.at)}</td><td class="small">${esc(cariAd(x.cariId))}</td><td class="small">${x.kanal==="whatsapp"?"💬 ":x.kanal==="tahakkuk"?"🧾 ":"📧 "}${esc(x.kime)}${x.kanal==="tahakkuk"?`<div class="muted">${esc(ayTam(x.donem))} tahakkukları: ${esc((x.dosyalar||[]).join(", "))}</div>`:""}${x.faturalar?.length?`<div class="muted">+ ${x.faturalar.length} fatura: ${esc(x.faturalar.join(", "))}${x.parca?` (${x.parca} parça)`:""}</div>`:""}${x.cc?`<div class="muted">cc: ${esc(x.cc)}</div>`:""}</td><td class="r small">${x.kanal==="tahakkuk"?"":esc(emBakiyeYazi(x.bakiye,x.doviz||"TRY"))}</td>
       <td class="small">${x.kanal==="whatsapp"?`<span class="muted">WhatsApp ${x.yol==="paylaş"?"ile paylaşıldı":"açıldı"}</span>`:x.durum==="ok"?`<span style="color:var(--alacak)">✓ gönderildi</span>`:`<span style="color:var(--borc)">Hata</span><div class="muted">${esc(x.hata||"")}</div>`}${x.oto?` <span class="pill">otomatik</span>`:""}</td><td class="small muted">${esc(x.hesap||"")}${x.by?`<div>${esc(kullaniciAd(x.by))}</div>`:""}</td></tr>`).join("")||`<tr><td colspan="6" class="empty">Henüz gönderim yok.</td></tr>`}</tbody></table></div>`,
     `<span></span><button class="btn" data-act="close">Kapat</button>`);
   const sh=$("#overlay .sheet"); if(sh){ sh.style.maxWidth="min(1000px,96vw)"; sh.style.width="100%"; } }
@@ -3986,7 +4072,7 @@ function tkAySeciciBagla(on,ay,degis){ $("#"+on+"_onc").addEventListener("click"
 const sonrakiAySonu = d => iso(new Date(+d.slice(0,4),+d.slice(5,7)+1,0));
 // SKY Mali Müşavirlik'te e-posta modülü ayarlanmamışsa açık gelir; diğer firmalarda kapalı
 const skyFirma = () => { const u=(S.ayar?.firma?.unvan||"").toLocaleUpperCase("tr"); return /\bSKY\b/.test(u)&&/MÜŞAV|MUSAV/.test(u); };
-const MODUL_VARS={ekstreMail:()=>skyFirma(),tahakkukMail:()=>skyFirma(),mukellefBilgi:()=>skyFirma(),kkLuca:()=>skyFirma()};
+const MODUL_VARS={ekstreMail:()=>true,tahakkukMail:()=>skyFirma(),mukellefBilgi:()=>skyFirma(),kkLuca:()=>skyFirma()};
 const modulAcik = ad => { const v=S.ayar?.moduller?.[ad]; return v===undefined?!!MODUL_VARS[ad]?.():!!v; };
 const TK_TIP={gelir:{fat:"satis",dek:"alacak_dekont",ad:"Gelir",cari:"Müşteri",tipler:["musteri","ikisi"],ctip:"musteri"},gider:{fat:"alis",dek:"borc_dekont",ad:"Gider",cari:"Tedarikçi",tipler:["tedarikci","ikisi"],ctip:"tedarikci"}};
 const tkTipOf = h => (h.tur==="alis"||h.tur==="borc_dekont")?"gider":"gelir";
@@ -4342,7 +4428,7 @@ function modulPanel(){
     <label style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-modul="tahakkuk" ${modulAcik("tahakkuk")?"checked":""} style="margin-top:3px">
     <span><b>Aylık tahakkuk</b><br><span class="small muted">Müşterilerinizden her ay alacağınız ücretleri ve her ay ödediğiniz kira, abonelik gibi giderleri bir tabloda tutar; ay sonunda hepsini ya da seçtiklerinizi carilere işler. Mali müşavirlik bürosunun kendi firması için.</span></span></label>
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="ekstreMail" ${modulAcik("ekstreMail")?"checked":""} style="margin-top:3px">
-    <span><b>Ekstre e-postası (Gmail)</b><br><span class="small muted">Müşterilere PDF ekli cari ekstresini firmanın Gmail adresinden tek tek, toplu ya da her ay otomatik gönderir. Firmanın Gmail adresinin Google tarafında izinli listeye eklenmiş olması gerekir.</span></span></label>
+    <span><b>Ekstre e-postası (Gmail)</b><br><span class="small muted">Müşterilere PDF ekli cari ekstresini (isteğe bağlı olarak entegratörden indirilen faturalarıyla birlikte) firmanın Gmail adresinden tek tek, toplu ya da her ay otomatik gönderir. Firmanın Gmail adresinin Google tarafında izinli listeye eklenmiş olması gerekir.</span></span></label>
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="tahakkukMail" ${modulAcik("tahakkukMail")?"checked":""} style="margin-top:3px">
     <span><b>Tahakkuk gönderimi (Drive › e-posta)</b><br><span class="small muted">Mükelleflerin Google Drive klasöründeki beyanname tahakkuklarını ve SGK hizmet listelerini seçilen dönem için bulur, müşteriye e-postayla gönderir. Mali müşavirlik bürosu için.</span></span></label>
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px"><input type="checkbox" data-modul="mukellefBilgi" ${modulAcik("mukellefBilgi")?"checked":""} style="margin-top:3px">
@@ -4851,7 +4937,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.17.1";
+const SURUM="1.18.0";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
