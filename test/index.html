@@ -1103,7 +1103,7 @@ function vCariler(){
   :`<div class="empty">${S.cariler.size?"Filtreye uyan cari yok.":"Henüz cari kartı yok. Sağ üstten <b>Yeni cari</b> ile başlayın."}</div>`}</section>
   <p class="small muted">B: cari bize borçlu (alacağımız) · A: cari alacaklı (borcumuz). Dövizli carilerde TL karşılığı Ayarlar'daki güncel kurla hesaplanır.</p>
   ${cariAktarimPanel()}`;
-  return {title:"Cari hesaplar",btns:`${modulAcik("ekstreMail")?`<button class="btn" data-act="emTopluAc" data-w title="Müşterilere PDF ekli ekstreyi e-posta ile gönder">📧 Toplu ekstre gönder</button>`:""}${WA_ACIK&&modulAcik("ekstreMail")?`<button class="btn" data-act="waTopluAc" data-w title="Müşterilere bakiye mesajını WhatsApp ile gönder">💬 Toplu WhatsApp</button>`:""}<button class="btn" data-act="faturaAktar" data-w title="e-Fatura entegratöründen indirilen fatura listesini aktar">Excel'den fatura al</button><button class="btn" data-act="cariAktar" data-w>Excel'den cari al</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
+  return {title:"Cari hesaplar",btns:`${modulAcik("ekstreMail")?`<button class="btn" data-act="emTopluAc" data-w title="Müşterilere PDF ekli ekstreyi e-posta ile gönder">📧 Toplu ekstre gönder</button>`:""}${WA_ACIK&&modulAcik("ekstreMail")?`<button class="btn" data-act="waTopluAc" data-w title="Müşterilere bakiye mesajını WhatsApp ile gönder">💬 Toplu WhatsApp</button>`:""}<button class="btn" data-act="excelAktar" data-w title="Entegratör fatura listesi ya da borç/alacaklı cari listesi">Excel'den aktar</button><button class="btn" data-act="islem" data-w>+ Yeni işlem</button><button class="btn pri" data-act="cariForm" data-w>+ Yeni cari</button>`,html,
     after(){
       $("#cfq").addEventListener("input",e=>{f.q=e.target.value; const p=e.target.selectionStart; render(); const i=$("#cfq"); i.focus(); i.setSelectionRange(p,p);});
       $("#cftip").addEventListener("change",e=>{f.tip=e.target.value;render();});
@@ -2652,10 +2652,10 @@ function caHareket(r,cariId,doviz,aid,st){
   if(r.b) yap(r.b,"b"); if(r.a) yap(r.a,"a");
   return out;
 }
-function cariAktarAc(){
+function cariAktarAc(on){
   Object.keys(CA).forEach(k=>delete CA[k]);
   Object.assign(CA,{tip:"musteri",bosKart:true,varsTarih:TODAY.slice(0,4)+"-01-01",esle:{},etiket:{},hesap:{},say:{}});
-  modal("Excel'den cari hesapları al",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px" id="caKok">
+  modal("Excel'den aktar",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px" id="caKok">${exTurSec("cari")}
     <div class="filters"><label>Excel dosyası<input type="file" id="ca_f" accept=".xlsx,.xls,.csv,.txt,.htm,.html"></label></div>
     <p class="small muted" style="margin:0">Firma adı, tarih, açıklama, borç ve alacak sütunları olan listenizi seçin. Aynı firmanın satırları tek cari kartında toplanır; programda zaten olan firmalar ünvan veya VKN'den tanınır.</p>
     <div id="caEsle"></div><div id="caOn"></div></div>`,
@@ -2669,6 +2669,8 @@ function cariAktarAc(){
     if(!CA.rows.length){ $("#caEsle").innerHTML=`<div class="notice bad">Dosyada satır bulunamadı.</div>`; return; }
     CA.baslik=caBaslikBul(CA.rows); CA.kol=caKolon(CA.rows[CA.baslik]||[]); CA.esle={}; caCiz();
   });
+  exTurBagla();
+  if(on?.rows){ CA.rows=on.rows; CA.dosya=on.dosya; CA.baslik=caBaslikBul(CA.rows); CA.kol=caKolon(CA.rows[CA.baslik]||[]); CA.esle={}; caCiz(); $("#ca_f").closest("label").insertAdjacentHTML("afterend",`<span class="small muted" style="align-self:end;padding-bottom:8px">Seçili dosya: <b>${esc(on.dosya)}</b></span>`); }
   $("#caGo").addEventListener("click",caKaydet);
   $("#caKok").addEventListener("change",e=>{ const t=e.target, d=t.dataset;
     if(d.k){ if(d.k==="baslik"){ CA.baslik=Math.max(0,(+t.value||1)-1); CA.kol=caKolon(CA.rows[CA.baslik]||[]); } else CA.kol[d.k]=+t.value; if(d.k==="baslik"||d.k==="tur"||d.k==="aciklama"){ CA.esle={}; CA.hesap={}; } caCiz(); return; }
@@ -2818,9 +2820,9 @@ function faCiz(){
   $("#faGo").disabled=eksikZor||!P.satir.length||!S.canWrite;
   document.querySelectorAll("[data-fakol]").forEach(s=>s.addEventListener("change",()=>{ FA.kol[s.dataset.fakol]=+s.value; faCiz(); }));
   $("#fa_yon").addEventListener("change",e=>{ FA.yon=e.target.value; faCiz(); }); }
-function faturaAktarAc(){
+function faturaAktarAc(on){
   Object.keys(FA).forEach(k=>delete FA[k]); Object.assign(FA,{yon:"giden",yonVars:"giden"});
-  modal("Excel'den fatura al",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px">
+  modal("Excel'den aktar",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px">${exTurSec("fatura")}
     <div class="filters"><label>Fatura listesi (Excel / CSV)<input type="file" id="fa_f" accept=".xlsx,.xls,.csv,.txt,.htm,.html"></label></div>
     <p class="small muted" style="margin:0">e-Fatura entegratörünüzden indirdiğiniz <b>giden</b> veya <b>gelen</b> fatura listesini seçin. Giden faturalar satış, gelen faturalar alış olarak carilere işlenir; olmayan cariler VKN/TCKN veya ünvandan açılır. Aynı fatura ikinci kez aktarılmaz; aktarımı Cari hesaplar sayfasından geri alabilirsiniz.</p>
     <div id="faEsle"></div><div id="faOn"></div></div>`,
@@ -2831,10 +2833,35 @@ function faturaAktarAc(){
     try{ FA.rows=(await ekstreDosyaOku(f)).filter(r=>r.some(x=>String(x).trim()!=="")); FA.dosya=f.name; }
     catch(x){ $("#faEsle").innerHTML=`<div class="notice bad">${x.message==="eskixls"?"Bu dosya eski Excel biçiminde (.xls). Excel'de açıp <b>Farklı Kaydet → Excel Çalışma Kitabı (.xlsx)</b> olarak kaydedin ve onu seçin.":"Dosya okunamadı. Excel (.xlsx) veya CSV olarak kaydedip tekrar deneyin."}</div>`; return; }
     if(!FA.rows.length){ $("#faEsle").innerHTML=`<div class="notice bad">Dosyada satır bulunamadı.</div>`; return; }
-    FA.baslik=faBaslikBul(FA.rows); FA.kol=faKolon(FA.rows[FA.baslik]||[]);
-    const ad=bkNorm(f.name); FA.yon=FA.kol.yon>-1?"sutun":/GELEN|ALIS/.test(ad)?"gelen":"giden"; FA.yonVars=/GELEN|ALIS/.test(ad)?"gelen":"giden";
-    faCiz(); });
+    faYukle(f.name); });
+  exTurBagla();
+  if(on?.rows){ FA.rows=on.rows; FA.dosya=on.dosya; faYukle(on.dosya); $("#fa_f").closest("label").insertAdjacentHTML("afterend",`<span class="small muted" style="align-self:end;padding-bottom:8px">Seçili dosya: <b>${esc(on.dosya)}</b></span>`); }
   $("#faGo").addEventListener("click",faKaydet); }
+function faYukle(ad0){ FA.baslik=faBaslikBul(FA.rows); FA.kol=faKolon(FA.rows[FA.baslik]||[]);
+  const ad=bkNorm(ad0); FA.yon=FA.kol.yon>-1?"sutun":/GELEN|ALIS/.test(ad)?"gelen":"giden"; FA.yonVars=/GELEN|ALIS/.test(ad)?"gelen":"giden"; faCiz(); }
+/* tek düğme: "Excel'den aktar" — dosyaya bakıp cari listesi mi fatura listesi mi olduğunu anlar; pencerede tür değiştirilebilir */
+const EX={};
+function exTurSec(t){ return `<div class="seg" role="group" aria-label="Aktarım türü" style="align-self:flex-start"><button type="button" data-extur="fatura" aria-pressed="${t==="fatura"}">🧾 Fatura listesi (entegratör)</button><button type="button" data-extur="cari" aria-pressed="${t==="cari"}">👥 Cari listesi (borç / alacak)</button></div>`; }
+function exTurBagla(){ document.querySelectorAll("[data-extur]").forEach(b=>b.addEventListener("click",()=>{ const t=b.dataset.extur, rows=(t==="cari"?FA.rows:CA.rows)||EX.rows, dosya=(t==="cari"?FA.dosya:CA.dosya)||EX.dosya;
+  if(b.getAttribute("aria-pressed")==="true") return; (t==="cari"?cariAktarAc:faturaAktarAc)(rows?{rows,dosya}:null); })); }
+function exTurTahmin(rows){ let fa=0, ca=0; for(const r of rows.slice(0,30)){ const t=r.map(x=>bkNorm(x));
+  if(t.some(x=>/^BORC|BORC TUTAR|^ALACAK|ALACAK TUTAR/.test(x))) ca+=3;
+  if(t.some(x=>/ODENECEK|VERGILER DAHIL|MATRAH|ETTN|FATURA NO|FATURA NUMARASI|FATURA TARIHI|HESAPLANAN KDV/.test(x))) fa+=2; }
+  return fa>ca?"fatura":ca>fa?"cari":"fatura"; }
+function excelAktarAc(){
+  for(const k of Object.keys(EX)) delete EX[k];
+  modal("Excel'den aktar",`<div style="display:flex;flex-direction:column;gap:14px;padding:16px 18px">
+    <div class="filters"><label>Excel / CSV dosyası<input type="file" id="ex_f" accept=".xlsx,.xls,.csv,.txt,.htm,.html"></label></div>
+    <p class="small muted" style="margin:0">İki tür dosya aktarılabilir; program dosyaya bakıp türünü kendisi anlar, sonraki ekranda değiştirebilirsiniz:</p>
+    <ul class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+      <li><b>Fatura listesi:</b> e-Fatura entegratöründen indirilen giden / gelen fatura listesi (fatura no, tarih, alıcı/gönderici, VKN, ödenecek tutar…). Faturalar satış/alış olarak işlenir.</li>
+      <li><b>Cari listesi:</b> firma adı, tarih, açıklama, borç ve alacak sütunlu liste (eski programdan devir, cari ekstresi…).</li></ul>
+    <div id="exDurum"></div></div>`,`<span></span><button class="btn" data-act="close">Vazgeç</button>`);
+  $("#ex_f").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; $("#exDurum").innerHTML=`<div class="muted">Dosya okunuyor…</div>`;
+    let rows; try{ rows=(await ekstreDosyaOku(f)).filter(r=>r.some(x=>String(x).trim()!=="")); }
+    catch(x){ $("#exDurum").innerHTML=`<div class="notice bad">${x.message==="eskixls"?"Bu dosya eski Excel biçiminde (.xls). Excel'de açıp <b>Farklı Kaydet → Excel Çalışma Kitabı (.xlsx)</b> olarak kaydedin ve onu seçin.":"Dosya okunamadı. Excel (.xlsx) veya CSV olarak kaydedip tekrar deneyin."}</div>`; return; }
+    if(!rows.length){ $("#exDurum").innerHTML=`<div class="notice bad">Dosyada satır bulunamadı.</div>`; return; }
+    EX.rows=rows; EX.dosya=f.name; (exTurTahmin(rows)==="cari"?cariAktarAc:faturaAktarAc)({rows,dosya:f.name}); }); }
 function faKaydet(){
   const P=FA.plan; if(!P||!S.canWrite) return;
   const aid=uid("ca"), st=stamp(), yeniKod=kodSayaci(); let yc=0, n=0;
@@ -2859,6 +2886,7 @@ function cariAktarimPanel(){
 Object.assign(ACT,{
   cariAktar:()=>cariAktarAc(),
   faturaAktar:()=>faturaAktarAc(),
+  excelAktar:()=>excelAktarAc(),
   kodDuzenle:el=>{ if(!S.canEdit) return; const L=eskiKodlu(); if(!L.length) return;
     if(el.dataset.ok!=="1"){ el.dataset.ok="1"; el.textContent=`${L.length} cari yeniden kodlansın mı? Onayla`; return; }
     const sayac=kodSayaci(); L.sort((a,b)=>(+a.kod.slice(1))-(+b.kod.slice(1)));
@@ -4824,7 +4852,7 @@ Object.assign(ACT,{
 });
 
 /* ---------- sürüm ve otomatik güncelleme ---------- */
-const SURUM="1.17.0-önizleme";
+const SURUM="1.17.1-önizleme";
 document.querySelectorAll(".surumNo").forEach(e=>e.textContent=SURUM);
 try{ const eski=localStorage.getItem("skypro_surum"); if(eski&&eski!==SURUM) setTimeout(()=>toast("SKYPRO "+SURUM+" sürümüne güncellendi"),800); localStorage.setItem("skypro_surum",SURUM); }catch{}
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
